@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  # NATS for messaging
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222" # Client port
+      - "8222:8222" # HTTP monitoring port
+    command: "-js" # Enable JetStream for persistence
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: cqrs_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d cqrs_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # The main application service
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # Use docker service names for connection
+      APP_DSN: "postgres://user:password@postgres:5432/cqrs_db"
+      APP_NATS_URL: "nats://nats:4222"
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for postgres to be ready
+      nats:
+        condition: service_started
+
+volumes:
+  postgres_data:
