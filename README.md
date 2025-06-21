@@ -1,4 +1,4 @@
-# **Production-Ready Go CQRS Framework**
+# **Go CQRS Framework**
 
 This repository provides a lightweight yet robust Go framework for building event-driven, scalable, and resilient services using the Command Query Responsibility Segregation (CQRS) pattern. It comes with built-in support for common patterns required in distributed systems, such as the Transactional Outbox, Idempotent Consumers, and configurable retry mechanisms.
 
