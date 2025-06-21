@@ -72,6 +72,7 @@ func main() {
 
 	outboxStore := postgres.NewOutboxStore(db)
 	idempotencyStore := postgres.NewIdempotencyStore(db)
+	productViewRepo := app.NewProductViewRepository(db.Pool)
 
 	// Framework Components
 	topicMapper := defineTopicMapper()
@@ -89,10 +90,11 @@ func main() {
 	createProductHandler := app.NewCreateProductHandler(outboxStore, db)
 
 	// Event Handlers (Subscribers)
-	productProjection := app.NewProductViewProjection()
+	productProjection := app.NewProductViewProjection(productViewRepo)
 	idempotentProductViewHandler := handler.NewIdempotentEventHandler(
 		"ProductViewProjection", // Unique subscriber ID
 		idempotencyStore,
+		productViewRepo,
 		db,
 		productProjection.HandleProductCreated,
 	)

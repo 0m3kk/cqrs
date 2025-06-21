@@ -13,10 +13,20 @@ import (
 	"github.com/0m3kk/cqrs/event"
 )
 
+// ErrOutOfOrderEvent is returned when an event is received with a version that is not the expected next version.
+var ErrOutOfOrderEvent = errors.New("out of order event")
+
 // IdempotencyStore defines the interface for checking and storing processed event IDs.
 type IdempotencyStore interface {
 	IsProcessed(ctx context.Context, eventID uuid.UUID, subscriberID string) (bool, error)
 	MarkAsProcessed(ctx context.Context, eventID uuid.UUID, subscriberID string) error
+}
+
+// VersionedStore defines an interface for read models that support versioning.
+type VersionedStore interface {
+	// GetVersion retrieves the current version of an aggregate's view model.
+	// It should return 0 if the view model does not exist yet.
+	GetVersion(ctx context.Context, aggregateID uuid.UUID) (int, error)
 }
 
 // TransactionalHandler defines a function that executes business logic within a transaction.
@@ -31,7 +41,8 @@ type Transactor interface {
 // with idempotency checks and retry logic.
 type IdempotentEventHandler struct {
 	subscriberID   string
-	store          IdempotencyStore
+	idempStore     IdempotencyStore
+	versionStore   VersionedStore // Store for checking view model version
 	transactor     Transactor
 	handler        func(ctx context.Context, evt event.OutboxEvent) error
 	maxElapsedTime time.Duration
@@ -50,14 +61,16 @@ func WithMaxElapsedTime(maxElapsedTime time.Duration) HandlerOption {
 // NewIdempotentEventHandler creates a new idempotent event handler.
 func NewIdempotentEventHandler(
 	subscriberID string,
-	store IdempotencyStore,
+	idempStore IdempotencyStore,
+	versionStore VersionedStore,
 	transactor Transactor,
 	handler func(ctx context.Context, evt event.OutboxEvent) error,
 	opts ...HandlerOption,
 ) *IdempotentEventHandler {
 	h := &IdempotentEventHandler{
 		subscriberID:   subscriberID,
-		store:          store,
+		idempStore:     idempStore,
+		versionStore:   versionStore,
 		transactor:     transactor,
 		handler:        handler,
 		maxElapsedTime: 1 * time.Minute, // Set default
@@ -74,7 +87,7 @@ func NewIdempotentEventHandler(
 // Handle processes an event with idempotency and retry logic.
 func (h *IdempotentEventHandler) Handle(ctx context.Context, evt event.OutboxEvent) error {
 	// 1. Idempotency Check
-	isProcessed, err := h.store.IsProcessed(ctx, evt.EventID, h.subscriberID)
+	isProcessed, err := h.idempStore.IsProcessed(ctx, evt.EventID, h.subscriberID)
 	if err != nil {
 		return fmt.Errorf("failed to check for event idempotency: %w", err)
 	}
@@ -83,8 +96,33 @@ func (h *IdempotentEventHandler) Handle(ctx context.Context, evt event.OutboxEve
 		return nil
 	}
 
-	// 2. Retry Logic with Exponential Backoff
+	// Retry Logic with Exponential Backoff
 	operation := func() (any, error) {
+		// 2. Ordering Check (by Version) - this now happens INSIDE the retry loop.
+		currentVersion, err := h.versionStore.GetVersion(ctx, evt.AggregateID)
+		if err != nil {
+			// This is a transient error with the database, so we should retry.
+			return nil, fmt.Errorf("failed to get current view version: %w", err)
+		}
+		if evt.Version <= currentVersion {
+			slog.WarnContext(ctx, "Received old or duplicate event version, skipping",
+				"eventID", evt.EventID, "eventVersion", evt.Version, "currentVersion", currentVersion)
+			// This is a success case, no need to retry. We mark it as permanent to stop backoff.
+			// It's important to still mark the event as processed in the idempotency store
+			// to prevent it from being re-evaluated if it arrives again.
+			return nil, backoff.Permanent(h.transactor.WithTransaction(ctx, func(txCtx context.Context) error {
+				return h.idempStore.MarkAsProcessed(txCtx, evt.EventID, h.subscriberID)
+			}))
+		}
+
+		if evt.Version != currentVersion+1 {
+			slog.WarnContext(ctx, "Received out-of-order event, will be retried by the broker",
+				"eventID", evt.EventID, "eventVersion", evt.Version, "expectedVersion", currentVersion+1)
+			// Return the specific error. The broker infrastructure is responsible for how to handle this
+			// (e.g., NAK with delay). This is considered a final state for this attempt.
+			return nil, backoff.Permanent(ErrOutOfOrderEvent)
+		}
+
 		// 3. Transactional Execution
 		// This ensures that business logic and marking the event as processed
 		// happen atomically.
@@ -94,7 +132,7 @@ func (h *IdempotentEventHandler) Handle(ctx context.Context, evt event.OutboxEve
 				return fmt.Errorf("handler business logic failed: %w", err)
 			}
 			// Mark as processed within the same transaction
-			if err := h.store.MarkAsProcessed(txCtx, evt.EventID, h.subscriberID); err != nil {
+			if err := h.idempStore.MarkAsProcessed(txCtx, evt.EventID, h.subscriberID); err != nil {
 				return fmt.Errorf("failed to mark event as processed: %w", err)
 			}
 			return nil

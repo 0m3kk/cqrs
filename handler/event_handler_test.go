@@ -13,14 +13,16 @@ import (
 
 	"github.com/0m3kk/cqrs/event"
 	"github.com/0m3kk/cqrs/handler"
+	"github.com/0m3kk/cqrs/sample/app"
 	"github.com/0m3kk/cqrs/sample/infra/postgres"
 	"github.com/0m3kk/cqrs/testutil"
 )
 
 type HandlerIntegrationSuite struct {
 	testutil.DBIntegrationSuite
-	store *postgres.IdempotencyStore
-	db    *postgres.DB
+	store           *postgres.IdempotencyStore
+	productViewRepo *app.ProductViewRepository
+	db              *postgres.DB
 }
 
 func TestHandlerIntegrationSuite(t *testing.T) {
@@ -30,6 +32,7 @@ func TestHandlerIntegrationSuite(t *testing.T) {
 func (s *HandlerIntegrationSuite) SetupTest() {
 	s.db = &postgres.DB{Pool: s.Pool}
 	s.store = postgres.NewIdempotencyStore(s.db)
+	s.productViewRepo = app.NewProductViewRepository(s.Pool)
 	s.TruncateTables("processed_events")
 }
 
@@ -38,6 +41,7 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_HappyPath() {
 	ctx := context.Background()
 	subscriberID := "test-subscriber-1"
 	eventID := uuid.New()
+	aggregateID := uuid.New()
 	handlerCallCount := 0
 
 	// A simple handler that just increments a counter
@@ -46,8 +50,8 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_HappyPath() {
 		return nil
 	}
 
-	idempotentHandler := handler.NewIdempotentEventHandler(subscriberID, s.store, s.db, mockHandler)
-	testEvent := event.OutboxEvent{EventID: eventID}
+	idempotentHandler := handler.NewIdempotentEventHandler(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
+	testEvent := event.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
 
 	// WHEN
 	err := idempotentHandler.Handle(ctx, testEvent)
@@ -66,7 +70,7 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_SkipsDuplicateEvent() {
 	// GIVEN
 	ctx := context.Background()
 	subscriberID := "test-subscriber-2"
-	eventID := uuid.New()
+	aggregateID := uuid.New()
 	handlerCallCount := 0
 
 	mockHandler := func(ctx context.Context, evt event.OutboxEvent) error {
@@ -74,8 +78,8 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_SkipsDuplicateEvent() {
 		return nil
 	}
 
-	idempotentHandler := handler.NewIdempotentEventHandler(subscriberID, s.store, s.db, mockHandler)
-	testEvent := event.OutboxEvent{EventID: eventID}
+	idempotentHandler := handler.NewIdempotentEventHandler(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
+	testEvent := event.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
 
 	// Process it the first time
 	err := idempotentHandler.Handle(ctx, testEvent)
@@ -96,6 +100,7 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RollsBackOnHandlerFailur
 	ctx := context.Background()
 	subscriberID := "test-subscriber-3"
 	eventID := uuid.New()
+	aggregateID := uuid.New()
 	handlerCallCount := 0
 
 	// A handler that always fails
@@ -108,11 +113,12 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RollsBackOnHandlerFailur
 	idempotentHandler := handler.NewIdempotentEventHandler(
 		subscriberID,
 		s.store,
+		s.productViewRepo,
 		s.db,
 		failingHandler,
 		handler.WithMaxElapsedTime(5*time.Second),
 	)
-	testEvent := event.OutboxEvent{EventID: eventID}
+	testEvent := event.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
 
 	// WHEN
 	err := idempotentHandler.Handle(ctx, testEvent)
@@ -125,4 +131,91 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RollsBackOnHandlerFailur
 	isProcessed, dbErr := s.store.IsProcessed(ctx, eventID, subscriberID)
 	s.NoError(dbErr)
 	s.False(isProcessed, "Event should not be marked as processed if handler fails")
+}
+
+func (s *HandlerIntegrationSuite) TestIdempotentHandler_RetriesOnTransientFailure() {
+	// GIVEN
+	ctx := context.Background()
+	subscriberID := "test-subscriber-4"
+	aggregateID := uuid.New()
+	handlerCallCount := 0
+
+	transientlyFailingHandler := func(ctx context.Context, evt event.OutboxEvent) error {
+		handlerCallCount++
+		if handlerCallCount < 2 {
+			return errors.New("transient database error")
+		}
+		return nil
+	}
+
+	idempotentHandler := handler.NewIdempotentEventHandler(
+		subscriberID,
+		s.store,
+		s.productViewRepo,
+		s.db,
+		transientlyFailingHandler,
+		handler.WithMaxElapsedTime(2*time.Second),
+	)
+	testEvent := event.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
+
+	// WHEN
+	err := idempotentHandler.Handle(ctx, testEvent)
+
+	// THEN
+	s.NoError(err, "Handle should eventually succeed after retries")
+	s.Equal(2, handlerCallCount, "Handler should be called twice")
+
+	isProcessed, dbErr := s.store.IsProcessed(ctx, testEvent.EventID, subscriberID)
+	s.NoError(dbErr)
+	s.True(isProcessed)
+}
+
+func (s *HandlerIntegrationSuite) TestIdempotentHandler_RejectsOutOfOrderEvent() {
+	// GIVEN
+	ctx := context.Background()
+	subscriberID := "test-subscriber-5-ordering"
+	aggregateID := uuid.New()
+	handlerCallCount := 0
+
+	// This is the handler for the business logic, which should NOT be called.
+	mockHandler := func(ctx context.Context, evt event.OutboxEvent) error {
+		handlerCallCount++
+		return nil
+	}
+
+	// An event with version 2, while the current DB version for the aggregate is 0.
+	outOfOrderEvent := event.OutboxEvent{
+		EventID:     uuid.New(),
+		AggregateID: aggregateID,
+		Version:     2,
+	}
+
+	idempotentHandler := handler.NewIdempotentEventHandler(
+		subscriberID,
+		s.store,
+		s.productViewRepo,
+		s.db,
+		mockHandler,
+	)
+
+	// WHEN
+	err := idempotentHandler.Handle(ctx, outOfOrderEvent)
+
+	// THEN
+	// 1. We expect a specific "out of order" error, which is wrapped.
+	s.Require().Error(err)
+	s.ErrorIs(err, handler.ErrOutOfOrderEvent, "Expected a specific out-of-order error")
+
+	// 2. The business logic handler should never have been called.
+	s.Equal(0, handlerCallCount, "Business logic handler should not be called for an out-of-order event")
+
+	// 3. The event should NOT be marked as processed in the idempotency store.
+	isProcessed, dbErr := s.store.IsProcessed(ctx, outOfOrderEvent.EventID, subscriberID)
+	s.NoError(dbErr)
+	s.False(isProcessed, "Out-of-order event should not be marked as processed")
+
+	// 4. The view model version should remain unchanged (at 0).
+	currentVersion, dbErr := s.productViewRepo.GetVersion(ctx, aggregateID)
+	s.NoError(dbErr)
+	s.Equal(0, currentVersion, "View model version should not have changed")
 }

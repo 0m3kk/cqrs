@@ -18,3 +18,12 @@ CREATE TABLE IF NOT EXISTS processed_events (
     processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (event_id, subscriber_id)
 );
+
+-- A sample read model table to demonstrate versioning
+CREATE TABLE IF NOT EXISTS product_views (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
+    version INT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
