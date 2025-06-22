@@ -28,9 +28,9 @@ type Aggregate interface {
 	// ClearUncommittedEvents clears the list of uncommitted events.
 	ClearUncommittedEvents()
 	// LoadFromHistory rehydrates the aggregate's state from a stream of past events.
-	LoadFromHistory(ctx context.Context, events []Event)
+	LoadFromHistory(ctx context.Context, events []Event) error
 	// Apply applies an event to the aggregate, changing its state.
-	Apply(ctx context.Context, evt Event)
+	Apply(ctx context.Context, evt Event) error
 	// Validate checks if the aggregate's current state is valid.
 	Validate() error
 }
@@ -42,7 +42,7 @@ type AggregateRoot struct {
 	aggType       AggregateType
 	version       int
 	events        []Event
-	applyMethod   func(context.Context, Event)
+	applyMethod   func(context.Context, Event) error
 	validateState func() error
 }
 
@@ -50,7 +50,7 @@ type AggregateRoot struct {
 // It requires references to the concrete aggregate's apply and validate methods.
 func NewAggregateRoot(
 	aggType AggregateType,
-	applyMethod func(context.Context, Event),
+	applyMethod func(context.Context, Event) error,
 	validateState func() error,
 ) *AggregateRoot {
 	return &AggregateRoot{
@@ -69,7 +69,9 @@ func (a *AggregateRoot) ClearUncommittedEvents()       { a.events = nil }
 // TrackChange records a new event by applying it, validating the new state,
 // and adding it to the list of uncommitted events.
 func (a *AggregateRoot) TrackChange(ctx context.Context, evt Event) error {
-	a.applyMethod(ctx, evt)
+	if err := a.applyMethod(ctx, evt); err != nil {
+		return fmt.Errorf("apply event when tracking change failed. %w", err)
+	}
 	if err := a.validateState(); err != nil {
 		return fmt.Errorf("state validation failed after applying event %s: %w", evt.EventType(), err)
 	}
@@ -79,15 +81,18 @@ func (a *AggregateRoot) TrackChange(ctx context.Context, evt Event) error {
 
 // LoadFromHistory rehydrates the aggregate's state by applying a series of past events.
 // It does NOT validate the state, as historical events are assumed to be valid.
-func (a *AggregateRoot) LoadFromHistory(ctx context.Context, history []Event) {
+func (a *AggregateRoot) LoadFromHistory(ctx context.Context, history []Event) error {
 	for _, evt := range history {
-		a.applyMethod(ctx, evt)
+		if err := a.applyMethod(ctx, evt); err != nil {
+			return fmt.Errorf("apply event from history failed. %w", err)
+		}
 	}
+	return nil
 }
 
 // Apply is a placeholder and should be implemented by embedding structs.
-func (a *AggregateRoot) Apply(ctx context.Context, evt Event) {
-	a.applyMethod(ctx, evt)
+func (a *AggregateRoot) Apply(ctx context.Context, evt Event) error {
+	return a.applyMethod(ctx, evt)
 }
 
 // Validate is a placeholder and should be implemented by embedding structs.

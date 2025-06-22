@@ -12,7 +12,11 @@ import (
 	"github.com/0m3kk/eventus/infra/nats"
 	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/outbox"
-	"github.com/0m3kk/eventus/sample/app"
+	"github.com/0m3kk/eventus/sample/command/command"
+	"github.com/0m3kk/eventus/sample/command/handler"
+	domainRepository "github.com/0m3kk/eventus/sample/domain/repository"
+	"github.com/0m3kk/eventus/sample/query/projection"
+	viewRepository "github.com/0m3kk/eventus/sample/query/repository"
 )
 
 func main() {
@@ -26,7 +30,6 @@ func main() {
 
 	// --- Dependency Injection ---
 
-	// Get config from environment
 	dsn := os.Getenv("APP_DSN")
 	if dsn == "" {
 		slog.Error("APP_DSN environment variable not set")
@@ -56,53 +59,50 @@ func main() {
 	slog.Info("NATS connection established")
 
 	outboxStore := postgres.NewOutboxStore(db)
+	const snapshotFrequency = 5
+	eventStore := postgres.NewEventStore(db, outboxStore, snapshotFrequency)
+	productRepo := domainRepository.NewProductRepository(eventStore)
 	idempotencyStore := postgres.NewIdempotencyStore(db)
-	productViewRepo := app.NewProductViewRepository(db.Pool)
+	productViewRepo := viewRepository.NewProductViewRepository(db.Pool)
 
-	// Run multiple relay workers for scalability
+	// Framework Components
 	for range 3 {
 		relay := outbox.NewRelay(outboxStore, broker, 10, 2*time.Second)
-		relay.Start(ctx) // It runs in the background
-		// In a real app, you'd manage these relay instances for graceful shutdown.
+		relay.Start(ctx)
 	}
 	slog.Info("Outbox relays started")
 
 	// Application Handlers
-	// Command Handlers (would be exposed via an API in a real app)
-	createProductHandler := app.NewCreateProductHandler(outboxStore, db)
+	createProductHandler := handler.NewCreateProductHandler(productRepo, db)
 
 	// Event Handlers (Subscribers)
-	productProjection := app.NewProductViewProjection(productViewRepo)
-	idempotentProductViewHandler := cqrs.NewProjection(
-		"ProductViewProjection", // Unique subscriber ID
+	productProjectionHandler := projection.NewProductProjectionHandler(productViewRepo)
+	productProjection := cqrs.NewProjection(
+		"ProductProjection",
 		idempotencyStore,
 		productViewRepo,
 		db,
-		productProjection.HandleProductCreated,
+		productProjectionHandler.Handle,
 	)
 
-	// Start subscribing to topics
-	if err := broker.Subscribe(ctx, "products", "ProductViewProjection", idempotentProductViewHandler.Handle); err != nil {
+	if err := broker.Subscribe(ctx, "products", "ProductProjection", productProjection.Handle); err != nil {
 		slog.Error("Failed to subscribe to topic", "error", err, "topic", "products")
 		os.Exit(1)
 	}
 
 	// --- Simulate some work ---
 	go func() {
-		// Wait a bit for subscriptions to be ready
 		time.Sleep(3 * time.Second)
 		slog.Info("Simulating product creation command...")
-		cmd := app.CreateProductCommand{
-			Name:  "Production-Ready Widget",
-			Price: 99.99,
+		cmd := command.CreateProductCommand{
+			Name:  "Clean Architecture Widget",
+			Price: 299.99,
 		}
 		if err := createProductHandler.Handle(context.Background(), cmd); err != nil {
 			slog.Error("Failed to simulate command", "error", err)
 		}
 	}()
 
-	// --- Wait for shutdown signal ---
 	<-ctx.Done()
 	slog.Info("Shutdown signal received. Exiting.")
-	// Graceful shutdown logic would go here (e.g., waiting for relays/subscribers to finish)
 }
