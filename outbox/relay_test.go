@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/0m3kk/eventus/eventsrc"
+	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/outbox"
 	"github.com/0m3kk/eventus/sample/domain"
-	"github.com/0m3kk/eventus/sample/infra/postgres"
 	"github.com/0m3kk/eventus/testutil"
 )
 

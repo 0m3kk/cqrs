@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/0m3kk/eventus/cqrs"
+	"github.com/0m3kk/eventus/infra/nats"
+	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/outbox"
 	"github.com/0m3kk/eventus/sample/app"
-	"github.com/0m3kk/eventus/sample/infra/nats"
-	"github.com/0m3kk/eventus/sample/infra/postgres"
 )
 
 // defineTopicMapper is an application-specific function that defines routing rules.

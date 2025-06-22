@@ -11,8 +11,8 @@ import (
 
 	"github.com/0m3kk/eventus/cqrs"
 	"github.com/0m3kk/eventus/eventsrc"
+	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/sample/app"
-	"github.com/0m3kk/eventus/sample/infra/postgres"
 	"github.com/0m3kk/eventus/testutil"
 )
 
