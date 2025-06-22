@@ -31,7 +31,6 @@ type Store interface {
 	// and any error that occurred.
 	Load(
 		ctx context.Context,
-		aggregateType AggregateType,
 		aggregateID uuid.UUID,
 	) (snapshot json.RawMessage, version int, history []Event, err error)
 }

@@ -26,10 +26,9 @@ func NewRepository[T Aggregate](store Store, newEmptyAggregate func() T) *Reposi
 // Load retrieves an aggregate from the event store by its ID.
 func (r *Repository[T]) Load(ctx context.Context, id uuid.UUID) (T, error) {
 	aggregate := r.newEmptyAggregate()
-	aggType := aggregate.AggregateType()
 
 	// The event store returns the snapshot payload, its version, and subsequent events.
-	snapshotPayload, _, history, err := r.eventStore.Load(ctx, aggType, id)
+	snapshotPayload, _, history, err := r.eventStore.Load(ctx, id)
 	if err != nil {
 		var zero T
 		return zero, fmt.Errorf("failed to load aggregate %s from store: %w", id, err)

@@ -16,6 +16,10 @@ type GetProductByIDHandler struct {
 	repository repository.ProductViewRepository
 }
 
+func NewGetProductByIDHandler(repository repository.ProductViewRepository) *GetProductByIDHandler {
+	return &GetProductByIDHandler{repository: repository}
+}
+
 // Query retrieves a product view by its ID and returns it as a view.ProductView.
 func (g GetProductByIDHandler) Query(ctx context.Context, query GetProductByID) (view.ProductView, error) {
 	productView, err := g.repository.GetProductViewByID(ctx, query.ID)

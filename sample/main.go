@@ -8,13 +8,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/0m3kk/eventus/cqrs"
 	"github.com/0m3kk/eventus/infra/nats"
 	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/outbox"
 	"github.com/0m3kk/eventus/sample/command"
+	"github.com/0m3kk/eventus/sample/domain/event"
 	domainRepository "github.com/0m3kk/eventus/sample/domain/repository"
 	"github.com/0m3kk/eventus/sample/query/projection"
+	"github.com/0m3kk/eventus/sample/query/query"
 	viewRepository "github.com/0m3kk/eventus/sample/query/repository"
 )
 
@@ -63,45 +67,82 @@ func main() {
 	productRepo := domainRepository.NewProductRepository(eventStore)
 	idempotencyStore := postgres.NewIdempotencyStore(db)
 	productViewRepo := viewRepository.NewProductViewRepository(db.Pool)
+	event.RegisterAllEvents()
 
 	// Framework Components
+	// Start multiple relay workers for concurrency
 	for range 3 {
 		relay := outbox.NewRelay(outboxStore, broker, 10, 2*time.Second)
 		relay.Start(ctx)
 	}
 	slog.Info("Outbox relays started")
 
-	// Application Handlers
+	// --- Application Handlers ---
+
+	// Command Side
 	createProductHandler := command.NewCreateProductHandler(productRepo, db)
+
+	// Query Side
+	getProductByIDHandler := query.NewGetProductByIDHandler(*productViewRepo)
 
 	// Event Handlers (Subscribers)
 	productProjectionHandler := projection.NewProductProjectionHandler(productViewRepo)
 	productProjection := cqrs.NewProjection(
 		"ProductProjection",
 		idempotencyStore,
-		productViewRepo,
+		productViewRepo, // The product view repo satisfies the VersionedStore interface
 		db,
 		productProjectionHandler.Handle,
 	)
 
+	// Subscribe the projection to the "products" topic
 	if err := broker.Subscribe(ctx, "products", "ProductProjection", productProjection.Handle); err != nil {
 		slog.Error("Failed to subscribe to topic", "error", err, "topic", "products")
 		os.Exit(1)
 	}
 
-	// --- Simulate some work ---
+	// --- Simulate Work (Full CQRS Loop) ---
 	go func() {
-		time.Sleep(3 * time.Second)
-		slog.Info("Simulating product creation command...")
-		cmd := command.CreateProductCommand{
-			Name:  "Clean Architecture Widget",
-			Price: 299.99,
+		// Generate a new ID for the product we're about to create.
+		// In a real API, this might come from the request.
+		productID := uuid.New()
+
+		// 1. COMMAND: Send a command to create a new product.
+		slog.Info("--> 1. Simulating CreateProductCommand...", "productID", productID)
+		createCmd := command.CreateProductCommand{
+			ID:    productID,
+			Name:  "CQRS-Powered Widget",
+			Price: 199.99,
 		}
-		if err := createProductHandler.Handle(context.Background(), cmd); err != nil {
-			slog.Error("Failed to simulate command", "error", err)
+		if err := createProductHandler.Handle(context.Background(), createCmd); err != nil {
+			slog.Error("Failed to handle CreateProductCommand", "error", err)
+			return
 		}
+		slog.Info("<-- Command handled successfully.")
+
+		// Give the system a moment to process the event through the outbox and projection.
+		// This simulates the eventual consistency of the read model.
+		slog.Info("... Waiting 5 seconds for eventual consistency ...")
+		time.Sleep(5 * time.Second)
+
+		// 2. QUERY: Query the read model to get the product view.
+		slog.Info("--> 2. Simulating GetProductByIDQuery...", "productID", productID)
+		productView, err := getProductByIDHandler.Query(context.Background(), query.GetProductByID{ID: productID})
+		if err != nil {
+			slog.Error("Failed to handle GetProductByIDQuery", "error", err)
+			return
+		}
+
+		slog.Info(
+			"<-- Query handled successfully. Product Details:",
+			"name",
+			productView.Name,
+			"price",
+			productView.Price,
+		)
 	}()
 
+	// Wait for shutdown signal
 	<-ctx.Done()
 	slog.Info("Shutdown signal received. Exiting.")
 }

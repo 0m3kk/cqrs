@@ -63,15 +63,14 @@ func (s *Store) Save(ctx context.Context, aggregate eventsrc.Aggregate) error {
 // Load reconstructs an aggregate by loading its latest snapshot and subsequent events.
 func (s *Store) Load(
 	ctx context.Context,
-	aggType eventsrc.AggregateType,
 	aggID uuid.UUID,
 ) (json.RawMessage, int, []eventsrc.Event, error) {
-	snapshot, version, err := s.loadSnapshot(ctx, aggType, aggID)
+	snapshot, version, err := s.loadSnapshot(ctx, aggID)
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("failed to load snapshot: %w", err)
 	}
 
-	events, err := s.loadEvents(ctx, aggType, aggID, version)
+	events, err := s.loadEvents(ctx, aggID, version)
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("failed to load events: %w", err)
 	}
@@ -110,7 +109,6 @@ func (s *Store) saveEventsInTx(ctx context.Context, tx pgx.Tx, events []eventsrc
 
 func (s *Store) loadEvents(
 	ctx context.Context,
-	aggType eventsrc.AggregateType,
 	aggID uuid.UUID,
 	fromVersion int,
 ) ([]eventsrc.Event, error) {
@@ -173,7 +171,6 @@ func (s *Store) saveSnapshotInTx(ctx context.Context, tx pgx.Tx, aggregate event
 
 func (s *Store) loadSnapshot(
 	ctx context.Context,
-	aggType eventsrc.AggregateType,
 	aggID uuid.UUID,
 ) (json.RawMessage, int, error) {
 	query := `
