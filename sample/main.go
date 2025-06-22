@@ -12,8 +12,7 @@ import (
 	"github.com/0m3kk/eventus/infra/nats"
 	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/outbox"
-	"github.com/0m3kk/eventus/sample/command/command"
-	"github.com/0m3kk/eventus/sample/command/handler"
+	"github.com/0m3kk/eventus/sample/command"
 	domainRepository "github.com/0m3kk/eventus/sample/domain/repository"
 	"github.com/0m3kk/eventus/sample/query/projection"
 	viewRepository "github.com/0m3kk/eventus/sample/query/repository"
@@ -73,7 +72,7 @@ func main() {
 	slog.Info("Outbox relays started")
 
 	// Application Handlers
-	createProductHandler := handler.NewCreateProductHandler(productRepo, db)
+	createProductHandler := command.NewCreateProductHandler(productRepo, db)
 
 	// Event Handlers (Subscribers)
 	productProjectionHandler := projection.NewProductProjectionHandler(productViewRepo)

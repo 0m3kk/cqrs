@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/0m3kk/eventus/sample/domain/event"
+	"github.com/0m3kk/eventus/sample/query/view"
 )
 
 // ProductViewRepository is a concrete implementation that also satisfies the VersionedStore interface.
@@ -59,6 +60,33 @@ func (r *ProductViewRepository) SaveProductView(ctx context.Context, evt event.P
 		return fmt.Errorf("failed to save product view: %w", err)
 	}
 	return nil
+}
+
+// GetProductViewByID retrieves the product view by its ID.
+func (r *ProductViewRepository) GetProductViewByID(
+	ctx context.Context,
+	aggregateID uuid.UUID,
+) (*view.ProductView, error) {
+	var productView view.ProductView
+	query := `
+        SELECT id, name, price, version, updated_at
+        FROM product_views
+        WHERE id = $1
+    `
+	err := r.pool.QueryRow(ctx, query, aggregateID).Scan(
+		&productView.ID,
+		&productView.Name,
+		&productView.Price,
+		&productView.Version,
+		&productView.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // Return nil if the view doesn't exist yet.
+		}
+		return nil, fmt.Errorf("failed to get product view by ID: %w", err)
+	}
+	return &productView, nil
 }
 
 // txKey is a private key type to get the transaction from the context.

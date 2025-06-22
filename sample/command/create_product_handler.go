@@ -1,4 +1,4 @@
-package handler
+package command
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/0m3kk/eventus/cqrs"
 	"github.com/0m3kk/eventus/eventsrc"
-	"github.com/0m3kk/eventus/sample/command/command"
 	"github.com/0m3kk/eventus/sample/domain/aggregate"
 	"github.com/0m3kk/eventus/sample/domain/event"
 	"github.com/0m3kk/eventus/sample/domain/repository"
@@ -28,7 +27,7 @@ func NewCreateProductHandler(repo *repository.ProductRepository, transactor cqrs
 	}
 }
 
-func (h *CreateProductHandler) Handle(ctx context.Context, cmd command.CreateProductCommand) error {
+func (h *CreateProductHandler) Handle(ctx context.Context, cmd CreateProductCommand) error {
 	slog.InfoContext(ctx, "Handling CreateProductCommand", "name", cmd.Name)
 
 	err := h.transactor.WithTransaction(ctx, func(txCtx context.Context) error {
