@@ -18,9 +18,9 @@ import (
 
 type HandlerIntegrationSuite struct {
 	testutil.DBIntegrationSuite
-	store           *postgres.IdempotencyStore
-	productViewRepo *app.ProductViewRepository
-	db              *postgres.DB
+	idempotencyStore *postgres.IdempotencyStore
+	productViewRepo  *app.ProductViewRepository
+	db               *postgres.DB
 }
 
 func TestHandlerIntegrationSuite(t *testing.T) {
@@ -29,12 +29,12 @@ func TestHandlerIntegrationSuite(t *testing.T) {
 
 func (s *HandlerIntegrationSuite) SetupTest() {
 	s.db = &postgres.DB{Pool: s.Pool}
-	s.store = postgres.NewIdempotencyStore(s.db)
+	s.idempotencyStore = postgres.NewIdempotencyStore(s.db)
 	s.productViewRepo = app.NewProductViewRepository(s.Pool)
 	s.TruncateTables("processed_events")
 }
 
-func (s *HandlerIntegrationSuite) TestIdempotentHandler_HappyPath() {
+func (s *HandlerIntegrationSuite) TestProjection_HappyPath() {
 	// GIVEN
 	ctx := context.Background()
 	subscriberID := "test-subscriber-1"
@@ -48,23 +48,23 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_HappyPath() {
 		return nil
 	}
 
-	idempotentHandler := cqrs.NewProjection(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
+	projection := cqrs.NewProjection(subscriberID, s.idempotencyStore, s.productViewRepo, s.db, mockHandler)
 	testEvent := eventsrc.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
 
 	// WHEN
-	err := idempotentHandler.Handle(ctx, testEvent)
+	err := projection.Handle(ctx, testEvent)
 
 	// THEN
 	s.NoError(err)
 	s.Equal(1, handlerCallCount, "Handler should be called exactly once")
 
 	// Verify it was marked as processed
-	isProcessed, err := s.store.IsProcessed(ctx, eventID, subscriberID)
+	isProcessed, err := s.idempotencyStore.IsProcessed(ctx, eventID, subscriberID)
 	s.NoError(err)
 	s.True(isProcessed)
 }
 
-func (s *HandlerIntegrationSuite) TestIdempotentHandler_SkipsDuplicateEvent() {
+func (s *HandlerIntegrationSuite) TestProjection_SkipsDuplicateEvent() {
 	// GIVEN
 	ctx := context.Background()
 	subscriberID := "test-subscriber-2"
@@ -76,24 +76,24 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_SkipsDuplicateEvent() {
 		return nil
 	}
 
-	idempotentHandler := cqrs.NewProjection(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
+	projection := cqrs.NewProjection(subscriberID, s.idempotencyStore, s.productViewRepo, s.db, mockHandler)
 	testEvent := eventsrc.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
 
 	// Process it the first time
-	err := idempotentHandler.Handle(ctx, testEvent)
+	err := projection.Handle(ctx, testEvent)
 	s.Require().NoError(err)
 	s.Require().Equal(1, handlerCallCount)
 
 	// WHEN
 	// Process the exact same event again
-	err = idempotentHandler.Handle(ctx, testEvent)
+	err = projection.Handle(ctx, testEvent)
 
 	// THEN
 	s.NoError(err, "Processing a duplicate event should not return an error")
 	s.Equal(1, handlerCallCount, "Handler should not be called for a duplicate event")
 }
 
-func (s *HandlerIntegrationSuite) TestIdempotentHandler_RollsBackOnHandlerFailure() {
+func (s *HandlerIntegrationSuite) TestProjection_RollsBackOnHandlerFailure() {
 	// GIVEN
 	ctx := context.Background()
 	subscriberID := "test-subscriber-3"
@@ -108,9 +108,9 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RollsBackOnHandlerFailur
 	}
 
 	// We disable retry for this test to check the immediate result
-	idempotentHandler := cqrs.NewProjection(
+	projection := cqrs.NewProjection(
 		subscriberID,
-		s.store,
+		s.idempotencyStore,
 		s.productViewRepo,
 		s.db,
 		failingHandler,
@@ -119,19 +119,19 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RollsBackOnHandlerFailur
 	testEvent := eventsrc.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
 
 	// WHEN
-	err := idempotentHandler.Handle(ctx, testEvent)
+	err := projection.Handle(ctx, testEvent)
 
 	// THEN
 	s.Error(err, "Handle should return an error if the inner handler fails after retries")
 	s.True(handlerCallCount > 0, "Handler should have been called at least once")
 
 	// Verify it was NOT marked as processed due to the transaction rollback
-	isProcessed, dbErr := s.store.IsProcessed(ctx, eventID, subscriberID)
+	isProcessed, dbErr := s.idempotencyStore.IsProcessed(ctx, eventID, subscriberID)
 	s.NoError(dbErr)
 	s.False(isProcessed, "Event should not be marked as processed if handler fails")
 }
 
-func (s *HandlerIntegrationSuite) TestIdempotentHandler_RetriesOnTransientFailure() {
+func (s *HandlerIntegrationSuite) TestProjection_RetriesOnTransientFailure() {
 	// GIVEN
 	ctx := context.Background()
 	subscriberID := "test-subscriber-4"
@@ -146,9 +146,9 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RetriesOnTransientFailur
 		return nil
 	}
 
-	idempotentHandler := cqrs.NewProjection(
+	projection := cqrs.NewProjection(
 		subscriberID,
-		s.store,
+		s.idempotencyStore,
 		s.productViewRepo,
 		s.db,
 		transientlyFailingHandler,
@@ -157,18 +157,18 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RetriesOnTransientFailur
 	testEvent := eventsrc.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
 
 	// WHEN
-	err := idempotentHandler.Handle(ctx, testEvent)
+	err := projection.Handle(ctx, testEvent)
 
 	// THEN
 	s.NoError(err, "Handle should eventually succeed after retries")
 	s.Equal(2, handlerCallCount, "Handler should be called twice")
 
-	isProcessed, dbErr := s.store.IsProcessed(ctx, testEvent.EventID, subscriberID)
+	isProcessed, dbErr := s.idempotencyStore.IsProcessed(ctx, testEvent.EventID, subscriberID)
 	s.NoError(dbErr)
 	s.True(isProcessed)
 }
 
-func (s *HandlerIntegrationSuite) TestIdempotentHandler_RejectsOutOfOrderEvent() {
+func (s *HandlerIntegrationSuite) TestProjection_RejectsOutOfOrderEvent() {
 	// GIVEN
 	ctx := context.Background()
 	subscriberID := "test-subscriber-5-ordering"
@@ -188,16 +188,16 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RejectsOutOfOrderEvent()
 		Version:     2,
 	}
 
-	idempotentHandler := cqrs.NewProjection(
+	projection := cqrs.NewProjection(
 		subscriberID,
-		s.store,
+		s.idempotencyStore,
 		s.productViewRepo,
 		s.db,
 		mockHandler,
 	)
 
 	// WHEN
-	err := idempotentHandler.Handle(ctx, outOfOrderEvent)
+	err := projection.Handle(ctx, outOfOrderEvent)
 
 	// THEN
 	// 1. We expect a specific "out of order" error, which is wrapped.
@@ -208,7 +208,7 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RejectsOutOfOrderEvent()
 	s.Equal(0, handlerCallCount, "Business logic handler should not be called for an out-of-order event")
 
 	// 3. The event should NOT be marked as processed in the idempotency store.
-	isProcessed, dbErr := s.store.IsProcessed(ctx, outOfOrderEvent.EventID, subscriberID)
+	isProcessed, dbErr := s.idempotencyStore.IsProcessed(ctx, outOfOrderEvent.EventID, subscriberID)
 	s.NoError(dbErr)
 	s.False(isProcessed, "Out-of-order event should not be marked as processed")
 
