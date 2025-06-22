@@ -15,21 +15,6 @@ import (
 	"github.com/0m3kk/eventus/sample/app"
 )
 
-// defineTopicMapper is an application-specific function that defines routing rules.
-func defineTopicMapper() outbox.TopicMapper {
-	return func(eventType string) string {
-		switch eventType {
-		case "ProductCreated":
-			return "products"
-		// Add other event-to-topic mappings here
-		// case "OrderCreated":
-		// 	return "orders"
-		default:
-			return "" // No topic for this event
-		}
-	}
-}
-
 func main() {
 	// Setup structured logging
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -74,12 +59,9 @@ func main() {
 	idempotencyStore := postgres.NewIdempotencyStore(db)
 	productViewRepo := app.NewProductViewRepository(db.Pool)
 
-	// Framework Components
-	topicMapper := defineTopicMapper()
-
 	// Run multiple relay workers for scalability
 	for range 3 {
-		relay := outbox.NewRelay(outboxStore, broker, topicMapper, 10, 2*time.Second)
+		relay := outbox.NewRelay(outboxStore, broker, 10, 2*time.Second)
 		relay.Start(ctx) // It runs in the background
 		// In a real app, you'd manage these relay instances for graceful shutdown.
 	}

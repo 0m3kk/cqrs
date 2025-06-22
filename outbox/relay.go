@@ -24,30 +24,25 @@ type Store interface {
 	) error
 }
 
-// TopicMapper is a function type that maps an event type to a message bus topic.
-type TopicMapper func(eventType string) string
-
 // Relay is a background worker that polls the outbox and publishes events.
 type Relay struct {
-	store       Store
-	broker      msgbus.Broker
-	topicMapper TopicMapper
-	batchSize   int
-	interval    time.Duration
-	wg          sync.WaitGroup
-	quit        chan struct{}
+	store     Store
+	broker    msgbus.Broker
+	batchSize int
+	interval  time.Duration
+	wg        sync.WaitGroup
+	quit      chan struct{}
 }
 
 // NewRelay creates a new Relay instance.
 // It can be run with multiple instances for scalability.
-func NewRelay(store Store, broker msgbus.Broker, mapper TopicMapper, batchSize int, interval time.Duration) *Relay {
+func NewRelay(store Store, broker msgbus.Broker, batchSize int, interval time.Duration) *Relay {
 	return &Relay{
-		store:       store,
-		broker:      broker,
-		topicMapper: mapper,
-		batchSize:   batchSize,
-		interval:    interval,
-		quit:        make(chan struct{}),
+		store:     store,
+		broker:    broker,
+		batchSize: batchSize,
+		interval:  interval,
+		quit:      make(chan struct{}),
 	}
 }
 
@@ -88,7 +83,7 @@ func (r *Relay) processBatch(ctx context.Context) error {
 		slog.DebugContext(ctx, "Processing fetched events", "count", len(events))
 
 		for _, evt := range events {
-			topic := r.topicMapper(evt.EventType)
+			topic := string(evt.AggregateType)
 			if topic == "" {
 				slog.WarnContext(
 					ctx,

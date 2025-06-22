@@ -59,14 +59,13 @@ func (s *RelayIntegrationSuite) TestRelay_ProcessesAndPublishesEvents() {
 	defer cancel()
 
 	broker := &MockBroker{PublishedEvents: make(chan eventsrc.OutboxEvent, 5)}
-	mapper := func(eventType string) string { return "test_topic" }
 
 	// Insert some events into the outbox
 	s.insertTestEvents(3)
 
 	// WHEN
 	// Start a relay worker
-	relay := outbox.NewRelay(s.store, broker, mapper, 2, 50*time.Millisecond)
+	relay := outbox.NewRelay(s.store, broker, 2, 50*time.Millisecond)
 	relay.Start(ctx)
 
 	// THEN
@@ -96,7 +95,6 @@ func (s *RelayIntegrationSuite) TestRelay_ConcurrentWorkersDoNotProcessSameEvent
 	defer cancel()
 
 	broker := &MockBroker{PublishedEvents: make(chan eventsrc.OutboxEvent, 20)}
-	mapper := func(eventType string) string { return "concurrent_topic" }
 
 	numEvents := 15
 	s.insertTestEvents(numEvents)
@@ -106,7 +104,7 @@ func (s *RelayIntegrationSuite) TestRelay_ConcurrentWorkersDoNotProcessSameEvent
 	numWorkers := 3
 	relays := make([]*outbox.Relay, numWorkers)
 	for i := range numWorkers {
-		relays[i] = outbox.NewRelay(s.store, broker, mapper, 5, 50*time.Millisecond)
+		relays[i] = outbox.NewRelay(s.store, broker, 5, 50*time.Millisecond)
 		relays[i].Start(ctx)
 	}
 	defer func() {
