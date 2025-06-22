@@ -8,11 +8,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/0m3kk/cqrs/handler"
-	"github.com/0m3kk/cqrs/outbox"
-	"github.com/0m3kk/cqrs/sample/app"
-	"github.com/0m3kk/cqrs/sample/infra/nats"
-	"github.com/0m3kk/cqrs/sample/infra/postgres"
+	"github.com/0m3kk/eventus/cqrs"
+	"github.com/0m3kk/eventus/outbox"
+	"github.com/0m3kk/eventus/sample/app"
+	"github.com/0m3kk/eventus/sample/infra/nats"
+	"github.com/0m3kk/eventus/sample/infra/postgres"
 )
 
 // defineTopicMapper is an application-specific function that defines routing rules.
@@ -91,7 +91,7 @@ func main() {
 
 	// Event Handlers (Subscribers)
 	productProjection := app.NewProductViewProjection(productViewRepo)
-	idempotentProductViewHandler := handler.NewIdempotentEventHandler(
+	idempotentProductViewHandler := cqrs.NewProjection(
 		"ProductViewProjection", // Unique subscriber ID
 		idempotencyStore,
 		productViewRepo,

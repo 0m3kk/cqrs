@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/0m3kk/cqrs/event"
-	"github.com/0m3kk/cqrs/handler"
-	"github.com/0m3kk/cqrs/sample/domain"
+	"github.com/0m3kk/eventus/cqrs"
+	"github.com/0m3kk/eventus/eventsrc"
+	"github.com/0m3kk/eventus/sample/domain"
 )
 
 // OutboxWriter defines an interface for saving events to the outbox.
 type OutboxWriter interface {
-	SaveEvents(ctx context.Context, events []event.Event) error
+	SaveEvents(ctx context.Context, events []eventsrc.Event) error
 }
 
 // CreateProductCommand is the command for creating a new product.
@@ -24,10 +24,10 @@ type CreateProductCommand struct {
 // CreateProductHandler handles the CreateProductCommand.
 type CreateProductHandler struct {
 	outboxWriter OutboxWriter
-	transactor   handler.Transactor
+	transactor   cqrs.Transactor
 }
 
-func NewCreateProductHandler(outboxWriter OutboxWriter, transactor handler.Transactor) *CreateProductHandler {
+func NewCreateProductHandler(outboxWriter OutboxWriter, transactor cqrs.Transactor) *CreateProductHandler {
 	return &CreateProductHandler{
 		outboxWriter: outboxWriter,
 		transactor:   transactor,

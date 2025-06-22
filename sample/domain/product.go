@@ -3,7 +3,7 @@ package domain
 import (
 	"github.com/google/uuid"
 
-	"github.com/0m3kk/cqrs/event"
+	"github.com/0m3kk/eventus/eventsrc"
 )
 
 // Product is our aggregate root.
@@ -12,12 +12,12 @@ type Product struct {
 	Name    string
 	Price   float64
 	Version int
-	events  []event.Event
+	events  []eventsrc.Event
 }
 
 // ProductCreated is an event emitted when a new product is created.
 type ProductCreated struct {
-	event.BaseEvent
+	eventsrc.BaseEvent
 	Name  string  `json:"name"`
 	Price float64 `json:"price"`
 }
@@ -30,7 +30,7 @@ func NewProduct(name string, price float64) *Product {
 	aggID := uuid.New()
 
 	evt := ProductCreated{
-		BaseEvent: event.BaseEvent{
+		BaseEvent: eventsrc.BaseEvent{
 			ID:    uuid.New(),
 			AggID: aggID,
 			Ver:   1,
@@ -45,14 +45,14 @@ func NewProduct(name string, price float64) *Product {
 }
 
 // GetUncommittedEvents returns and clears the list of uncommitted events.
-func (p *Product) GetUncommittedEvents() []event.Event {
+func (p *Product) GetUncommittedEvents() []eventsrc.Event {
 	evts := p.events
 	p.events = nil
 	return evts
 }
 
 // apply changes the state of the aggregate based on an event.
-func (p *Product) apply(evt event.Event) {
+func (p *Product) apply(evt eventsrc.Event) {
 	switch e := evt.(type) {
 	case ProductCreated:
 		p.ID = e.AggregateID()

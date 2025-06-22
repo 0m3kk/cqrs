@@ -1,4 +1,4 @@
-module github.com/0m3kk/cqrs
+module github.com/0m3kk/eventus
 
 go 1.24.3
 

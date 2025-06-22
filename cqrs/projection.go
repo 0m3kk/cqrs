@@ -1,4 +1,4 @@
-package handler
+package cqrs
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
 
-	"github.com/0m3kk/cqrs/event"
+	"github.com/0m3kk/eventus/eventsrc"
 )
 
 // ErrOutOfOrderEvent is returned when an event is received with a version that is not the expected next version.
@@ -37,37 +37,40 @@ type Transactor interface {
 	WithTransaction(ctx context.Context, fn TransactionalHandler) error
 }
 
-// IdempotentEventHandler is a decorator that wraps a business logic handler
+// ProjectionHandler main logic for projection view.
+type ProjectionHandler func(ctx context.Context, evt eventsrc.OutboxEvent) error
+
+// Projection is a decorator that wraps a business logic handler
 // with idempotency checks and retry logic.
-type IdempotentEventHandler struct {
+type Projection struct {
 	subscriberID   string
 	idempStore     IdempotencyStore
 	versionStore   VersionedStore // Store for checking view model version
 	transactor     Transactor
-	handler        func(ctx context.Context, evt event.OutboxEvent) error
+	handler        ProjectionHandler
 	maxElapsedTime time.Duration
 }
 
-// HandlerOption is a function that configures an IdempotentEventHandler.
-type HandlerOption func(*IdempotentEventHandler)
+// ProjectionOption is a function that configures an IdempotentEventHandler.
+type ProjectionOption func(*Projection)
 
 // WithMaxElapsedTime is an option to provide a custom backoff max elapsed time.
-func WithMaxElapsedTime(maxElapsedTime time.Duration) HandlerOption {
-	return func(h *IdempotentEventHandler) {
+func WithMaxElapsedTime(maxElapsedTime time.Duration) ProjectionOption {
+	return func(h *Projection) {
 		h.maxElapsedTime = maxElapsedTime
 	}
 }
 
-// NewIdempotentEventHandler creates a new idempotent event handler.
-func NewIdempotentEventHandler(
+// NewProjection creates a new idempotent event handler.
+func NewProjection(
 	subscriberID string,
 	idempStore IdempotencyStore,
 	versionStore VersionedStore,
 	transactor Transactor,
-	handler func(ctx context.Context, evt event.OutboxEvent) error,
-	opts ...HandlerOption,
-) *IdempotentEventHandler {
-	h := &IdempotentEventHandler{
+	handler func(ctx context.Context, evt eventsrc.OutboxEvent) error,
+	opts ...ProjectionOption,
+) *Projection {
+	h := &Projection{
 		subscriberID:   subscriberID,
 		idempStore:     idempStore,
 		versionStore:   versionStore,
@@ -85,7 +88,7 @@ func NewIdempotentEventHandler(
 }
 
 // Handle processes an event with idempotency and retry logic.
-func (h *IdempotentEventHandler) Handle(ctx context.Context, evt event.OutboxEvent) error {
+func (h *Projection) Handle(ctx context.Context, evt eventsrc.OutboxEvent) error {
 	// 1. Idempotency Check
 	isProcessed, err := h.idempStore.IsProcessed(ctx, evt.EventID, h.subscriberID)
 	if err != nil {

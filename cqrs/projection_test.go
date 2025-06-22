@@ -1,6 +1,4 @@
-// Integration test for the Idempotent Event Handler wrapper.
-// --------------------------------------------------------------
-package handler_test
+package cqrs_test
 
 import (
 	"context"
@@ -11,11 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/0m3kk/cqrs/event"
-	"github.com/0m3kk/cqrs/handler"
-	"github.com/0m3kk/cqrs/sample/app"
-	"github.com/0m3kk/cqrs/sample/infra/postgres"
-	"github.com/0m3kk/cqrs/testutil"
+	"github.com/0m3kk/eventus/cqrs"
+	"github.com/0m3kk/eventus/eventsrc"
+	"github.com/0m3kk/eventus/sample/app"
+	"github.com/0m3kk/eventus/sample/infra/postgres"
+	"github.com/0m3kk/eventus/testutil"
 )
 
 type HandlerIntegrationSuite struct {
@@ -45,13 +43,13 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_HappyPath() {
 	handlerCallCount := 0
 
 	// A simple handler that just increments a counter
-	mockHandler := func(ctx context.Context, evt event.OutboxEvent) error {
+	mockHandler := func(ctx context.Context, evt eventsrc.OutboxEvent) error {
 		handlerCallCount++
 		return nil
 	}
 
-	idempotentHandler := handler.NewIdempotentEventHandler(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
-	testEvent := event.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
+	idempotentHandler := cqrs.NewProjection(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
+	testEvent := eventsrc.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
 
 	// WHEN
 	err := idempotentHandler.Handle(ctx, testEvent)
@@ -73,13 +71,13 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_SkipsDuplicateEvent() {
 	aggregateID := uuid.New()
 	handlerCallCount := 0
 
-	mockHandler := func(ctx context.Context, evt event.OutboxEvent) error {
+	mockHandler := func(ctx context.Context, evt eventsrc.OutboxEvent) error {
 		handlerCallCount++
 		return nil
 	}
 
-	idempotentHandler := handler.NewIdempotentEventHandler(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
-	testEvent := event.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
+	idempotentHandler := cqrs.NewProjection(subscriberID, s.store, s.productViewRepo, s.db, mockHandler)
+	testEvent := eventsrc.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
 
 	// Process it the first time
 	err := idempotentHandler.Handle(ctx, testEvent)
@@ -104,21 +102,21 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RollsBackOnHandlerFailur
 	handlerCallCount := 0
 
 	// A handler that always fails
-	failingHandler := func(ctx context.Context, evt event.OutboxEvent) error {
+	failingHandler := func(ctx context.Context, evt eventsrc.OutboxEvent) error {
 		handlerCallCount++
 		return errors.New("business logic failed")
 	}
 
 	// We disable retry for this test to check the immediate result
-	idempotentHandler := handler.NewIdempotentEventHandler(
+	idempotentHandler := cqrs.NewProjection(
 		subscriberID,
 		s.store,
 		s.productViewRepo,
 		s.db,
 		failingHandler,
-		handler.WithMaxElapsedTime(5*time.Second),
+		cqrs.WithMaxElapsedTime(5*time.Second),
 	)
-	testEvent := event.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
+	testEvent := eventsrc.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
 
 	// WHEN
 	err := idempotentHandler.Handle(ctx, testEvent)
@@ -140,7 +138,7 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RetriesOnTransientFailur
 	aggregateID := uuid.New()
 	handlerCallCount := 0
 
-	transientlyFailingHandler := func(ctx context.Context, evt event.OutboxEvent) error {
+	transientlyFailingHandler := func(ctx context.Context, evt eventsrc.OutboxEvent) error {
 		handlerCallCount++
 		if handlerCallCount < 2 {
 			return errors.New("transient database error")
@@ -148,15 +146,15 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RetriesOnTransientFailur
 		return nil
 	}
 
-	idempotentHandler := handler.NewIdempotentEventHandler(
+	idempotentHandler := cqrs.NewProjection(
 		subscriberID,
 		s.store,
 		s.productViewRepo,
 		s.db,
 		transientlyFailingHandler,
-		handler.WithMaxElapsedTime(2*time.Second),
+		cqrs.WithMaxElapsedTime(2*time.Second),
 	)
-	testEvent := event.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
+	testEvent := eventsrc.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
 
 	// WHEN
 	err := idempotentHandler.Handle(ctx, testEvent)
@@ -178,19 +176,19 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RejectsOutOfOrderEvent()
 	handlerCallCount := 0
 
 	// This is the handler for the business logic, which should NOT be called.
-	mockHandler := func(ctx context.Context, evt event.OutboxEvent) error {
+	mockHandler := func(ctx context.Context, evt eventsrc.OutboxEvent) error {
 		handlerCallCount++
 		return nil
 	}
 
 	// An event with version 2, while the current DB version for the aggregate is 0.
-	outOfOrderEvent := event.OutboxEvent{
+	outOfOrderEvent := eventsrc.OutboxEvent{
 		EventID:     uuid.New(),
 		AggregateID: aggregateID,
 		Version:     2,
 	}
 
-	idempotentHandler := handler.NewIdempotentEventHandler(
+	idempotentHandler := cqrs.NewProjection(
 		subscriberID,
 		s.store,
 		s.productViewRepo,
@@ -204,7 +202,7 @@ func (s *HandlerIntegrationSuite) TestIdempotentHandler_RejectsOutOfOrderEvent()
 	// THEN
 	// 1. We expect a specific "out of order" error, which is wrapped.
 	s.Require().Error(err)
-	s.ErrorIs(err, handler.ErrOutOfOrderEvent, "Expected a specific out-of-order error")
+	s.ErrorIs(err, cqrs.ErrOutOfOrderEvent, "Expected a specific out-of-order error")
 
 	// 2. The business logic handler should never have been called.
 	s.Equal(0, handlerCallCount, "Business logic handler should not be called for an out-of-order event")

@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/0m3kk/cqrs/handler"
+	"github.com/0m3kk/eventus/cqrs"
 )
 
 // DB holds the database connection pool.
@@ -34,7 +34,7 @@ func (db *DB) Close() {
 }
 
 // WithTransaction implements the Transactor interface.
-func (db *DB) WithTransaction(ctx context.Context, fn handler.TransactionalHandler) error {
+func (db *DB) WithTransaction(ctx context.Context, fn cqrs.TransactionalHandler) error {
 	tx, err := db.Pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)

@@ -9,7 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/0m3kk/cqrs/event"
+	"github.com/0m3kk/eventus/eventsrc"
 )
 
 // NATSBroker is an implementation of the Broker interface using NATS.
@@ -41,7 +41,7 @@ func NewNATSBroker(url string) (*NATSBroker, error) {
 }
 
 // Publish sends an event to a NATS topic.
-func (b *NATSBroker) Publish(ctx context.Context, topic string, evt event.OutboxEvent) error {
+func (b *NATSBroker) Publish(ctx context.Context, topic string, evt eventsrc.OutboxEvent) error {
 	// Ensure the stream exists for the topic
 	streamName := topic
 	_, err := b.js.StreamInfo(streamName)
@@ -82,7 +82,7 @@ func (b *NATSBroker) Publish(ctx context.Context, topic string, evt event.Outbox
 func (b *NATSBroker) Subscribe(
 	ctx context.Context,
 	topic, subscriberID string,
-	handler func(context.Context, event.OutboxEvent) error,
+	handler func(context.Context, eventsrc.OutboxEvent) error,
 ) error {
 	streamName := topic
 	consumerName := fmt.Sprintf("%s-%s", topic, subscriberID)
@@ -127,7 +127,7 @@ func (b *NATSBroker) Subscribe(
 				}
 
 				for _, msg := range msgs {
-					var evt event.OutboxEvent
+					var evt eventsrc.OutboxEvent
 					if err := json.Unmarshal(msg.Data, &evt); err != nil {
 						slog.ErrorContext(ctx, "Failed to unmarshal event, skipping", "error", err, "topic", topic)
 						msg.Nak() // Negative acknowledgment, message might be redelivered

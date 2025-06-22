@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/0m3kk/cqrs/event"
+	"github.com/0m3kk/eventus/eventsrc"
 )
 
 // OutboxStore implements the outbox.Store interface for PostgreSQL.
@@ -25,7 +25,7 @@ func NewOutboxStore(db *DB) *OutboxStore {
 func (s *OutboxStore) ProcessOutboxBatch(
 	ctx context.Context,
 	batchSize int,
-	processFunc func(ctx context.Context, events []event.OutboxEvent) error,
+	processFunc func(ctx context.Context, events []eventsrc.OutboxEvent) error,
 ) error {
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
@@ -59,7 +59,7 @@ func (s *OutboxStore) ProcessOutboxBatch(
 }
 
 // fetchAndLockUnpublishedInTx is an internal helper that performs the SELECT ... FOR UPDATE.
-func fetchAndLockUnpublishedInTx(ctx context.Context, tx pgx.Tx, batchSize int) ([]event.OutboxEvent, error) {
+func fetchAndLockUnpublishedInTx(ctx context.Context, tx pgx.Tx, batchSize int) ([]eventsrc.OutboxEvent, error) {
 	query := `
         SELECT event_id, aggregate_id, event_type, payload, version
         FROM outbox
@@ -74,11 +74,11 @@ func fetchAndLockUnpublishedInTx(ctx context.Context, tx pgx.Tx, batchSize int) 
 	}
 	defer rows.Close()
 
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[event.OutboxEvent])
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[eventsrc.OutboxEvent])
 }
 
 // markAsPublishedInTx is an internal helper that updates the `published` flag.
-func markAsPublishedInTx(ctx context.Context, tx pgx.Tx, events []event.OutboxEvent) error {
+func markAsPublishedInTx(ctx context.Context, tx pgx.Tx, events []eventsrc.OutboxEvent) error {
 	eventIDs := make([]uuid.UUID, len(events))
 	for i, e := range events {
 		eventIDs[i] = e.EventID
@@ -102,7 +102,7 @@ func markAsPublishedInTx(ctx context.Context, tx pgx.Tx, events []event.OutboxEv
 }
 
 // SaveEvents saves events to the outbox table. It expects to be run within a transaction.
-func (s *OutboxStore) SaveEvents(ctx context.Context, events []event.Event) error {
+func (s *OutboxStore) SaveEvents(ctx context.Context, events []eventsrc.Event) error {
 	tx, ok := ctx.Value(txKey{}).(pgx.Tx)
 	if !ok {
 		return fmt.Errorf("SaveEvents must be called within a transaction")

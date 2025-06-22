@@ -8,20 +8,20 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/0m3kk/cqrs/event"
-	"github.com/0m3kk/cqrs/outbox"
-	"github.com/0m3kk/cqrs/sample/domain"
-	"github.com/0m3kk/cqrs/sample/infra/postgres"
-	"github.com/0m3kk/cqrs/testutil"
+	"github.com/0m3kk/eventus/eventsrc"
+	"github.com/0m3kk/eventus/outbox"
+	"github.com/0m3kk/eventus/sample/domain"
+	"github.com/0m3kk/eventus/sample/infra/postgres"
+	"github.com/0m3kk/eventus/testutil"
 )
 
 // MockBroker is a simple mock for the messagebus.Broker interface.
 type MockBroker struct {
-	PublishedEvents chan event.OutboxEvent
+	PublishedEvents chan eventsrc.OutboxEvent
 	PublishError    error
 }
 
-func (m *MockBroker) Publish(ctx context.Context, topic string, evt event.OutboxEvent) error {
+func (m *MockBroker) Publish(ctx context.Context, topic string, evt eventsrc.OutboxEvent) error {
 	if m.PublishError != nil {
 		return m.PublishError
 	}
@@ -32,7 +32,7 @@ func (m *MockBroker) Publish(ctx context.Context, topic string, evt event.Outbox
 func (m *MockBroker) Subscribe(
 	ctx context.Context,
 	topic, subscriberID string,
-	handler func(context.Context, event.OutboxEvent) error,
+	handler func(context.Context, eventsrc.OutboxEvent) error,
 ) error {
 	return nil
 }
@@ -59,7 +59,7 @@ func (s *RelayIntegrationSuite) TestRelay_ProcessesAndPublishesEvents() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	broker := &MockBroker{PublishedEvents: make(chan event.OutboxEvent, 5)}
+	broker := &MockBroker{PublishedEvents: make(chan eventsrc.OutboxEvent, 5)}
 	mapper := func(eventType string) string { return "test_topic" }
 
 	// Insert some events into the outbox
@@ -72,7 +72,7 @@ func (s *RelayIntegrationSuite) TestRelay_ProcessesAndPublishesEvents() {
 
 	// THEN
 	// Collect published events
-	var receivedEvents []event.OutboxEvent
+	var receivedEvents []eventsrc.OutboxEvent
 	for range 3 {
 		select {
 		case evt := <-broker.PublishedEvents:
@@ -96,7 +96,7 @@ func (s *RelayIntegrationSuite) TestRelay_ConcurrentWorkersDoNotProcessSameEvent
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	broker := &MockBroker{PublishedEvents: make(chan event.OutboxEvent, 20)}
+	broker := &MockBroker{PublishedEvents: make(chan eventsrc.OutboxEvent, 20)}
 	mapper := func(eventType string) string { return "concurrent_topic" }
 
 	numEvents := 15
@@ -147,16 +147,16 @@ func (s *RelayIntegrationSuite) insertTestEvents(count int) {
 	for i := range count {
 		p.GetUncommittedEvents() // Clear previous
 		evt := domain.ProductCreated{
-			BaseEvent: event.BaseEvent{ID: uuid.New(), AggID: p.ID, Ver: i + 1},
+			BaseEvent: eventsrc.BaseEvent{ID: uuid.New(), AggID: p.ID, Ver: i + 1},
 			Name:      "test",
 			Price:     1.0,
 		}
-		err := s.store.SaveEvents(context.Background(), []event.Event{evt})
+		err := s.store.SaveEvents(context.Background(), []eventsrc.Event{evt})
 		s.Require().Error(err, "SaveEvents should fail outside a transaction")
 
 		// Save correctly within a transaction
 		err = s.db.WithTransaction(context.Background(), func(txCtx context.Context) error {
-			return s.store.SaveEvents(txCtx, []event.Event{evt})
+			return s.store.SaveEvents(txCtx, []eventsrc.Event{evt})
 		})
 		s.Require().NoError(err)
 	}

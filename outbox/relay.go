@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0m3kk/cqrs/event"
-	"github.com/0m3kk/cqrs/messagebus"
+	"github.com/0m3kk/eventus/eventsrc"
+	"github.com/0m3kk/eventus/msgbus"
 )
 
 // Store defines the interface for interacting with the outbox storage.
@@ -20,7 +20,7 @@ type Store interface {
 	ProcessOutboxBatch(
 		ctx context.Context,
 		batchSize int,
-		processFunc func(ctx context.Context, events []event.OutboxEvent) error,
+		processFunc func(ctx context.Context, events []eventsrc.OutboxEvent) error,
 	) error
 }
 
@@ -30,7 +30,7 @@ type TopicMapper func(eventType string) string
 // Relay is a background worker that polls the outbox and publishes events.
 type Relay struct {
 	store       Store
-	broker      messagebus.Broker
+	broker      msgbus.Broker
 	topicMapper TopicMapper
 	batchSize   int
 	interval    time.Duration
@@ -40,7 +40,7 @@ type Relay struct {
 
 // NewRelay creates a new Relay instance.
 // It can be run with multiple instances for scalability.
-func NewRelay(store Store, broker messagebus.Broker, mapper TopicMapper, batchSize int, interval time.Duration) *Relay {
+func NewRelay(store Store, broker msgbus.Broker, mapper TopicMapper, batchSize int, interval time.Duration) *Relay {
 	return &Relay{
 		store:       store,
 		broker:      broker,
@@ -81,7 +81,7 @@ func (r *Relay) Start(ctx context.Context) {
 // to be executed within a transaction.
 func (r *Relay) processBatch(ctx context.Context) error {
 	// This function contains the logic to execute once events are fetched and locked.
-	processor := func(ctx context.Context, events []event.OutboxEvent) error {
+	processor := func(ctx context.Context, events []eventsrc.OutboxEvent) error {
 		if len(events) == 0 {
 			return nil
 		}

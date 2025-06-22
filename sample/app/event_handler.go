@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/0m3kk/cqrs/event"
-	"github.com/0m3kk/cqrs/sample/domain"
+	"github.com/0m3kk/eventus/eventsrc"
+	"github.com/0m3kk/eventus/sample/domain"
 )
 
 // ProductViewRepository is a concrete implementation that also satisfies the VersionedStore interface.
@@ -78,7 +78,7 @@ func NewProductViewProjection(repo *ProductViewRepository) *ProductViewProjectio
 }
 
 // HandleProductCreated processes the ProductCreated event.
-func (p *ProductViewProjection) HandleProductCreated(ctx context.Context, evt event.OutboxEvent) error {
+func (p *ProductViewProjection) HandleProductCreated(ctx context.Context, evt eventsrc.OutboxEvent) error {
 	var productCreatedEvt domain.ProductCreated
 	if err := json.Unmarshal(evt.Payload, &productCreatedEvt); err != nil {
 		return fmt.Errorf("failed to unmarshal ProductCreated event: %w", err)
