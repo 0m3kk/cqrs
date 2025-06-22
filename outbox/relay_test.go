@@ -11,7 +11,6 @@ import (
 	"github.com/0m3kk/eventus/eventsrc"
 	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/outbox"
-	"github.com/0m3kk/eventus/sample/domain"
 	"github.com/0m3kk/eventus/testutil"
 )
 
@@ -143,11 +142,10 @@ func (s *RelayIntegrationSuite) TestRelay_ConcurrentWorkersDoNotProcessSameEvent
 }
 
 func (s *RelayIntegrationSuite) insertTestEvents(count int) {
-	p := domain.NewProduct("Test", 1.0)
+	aggregateID := uuid.New()
 	for i := range count {
-		p.GetUncommittedEvents() // Clear previous
-		evt := domain.ProductCreated{
-			BaseEvent: eventsrc.BaseEvent{ID: uuid.New(), AggID: p.ID, Ver: i + 1},
+		evt := testutil.ProductCreated{
+			BaseEvent: eventsrc.BaseEvent{ID: uuid.New(), AggID: aggregateID, AggType: "products", Ver: i + 1},
 			Name:      "test",
 			Price:     1.0,
 		}

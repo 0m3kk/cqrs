@@ -31,7 +31,7 @@ func (s *DBIntegrationSuite) SetupSuite() {
 	// Find the project root to locate the schema.sql file
 	_, b, _, _ := runtime.Caller(0)
 	projectRoot := filepath.Join(filepath.Dir(b), "../") // Assumes testutil is one level deep
-	schemaPath := filepath.Join(projectRoot, "./sample/infra/postgres")
+	schemaPath := filepath.Join(projectRoot, "./infra/postgres")
 
 	dbName := "testdb"
 	dbUser := "testuser"

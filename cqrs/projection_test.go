@@ -3,6 +3,7 @@ package cqrs_test
 import (
 	"context"
 	"errors"
+	"log"
 	"testing"
 	"time"
 
@@ -12,14 +13,13 @@ import (
 	"github.com/0m3kk/eventus/cqrs"
 	"github.com/0m3kk/eventus/eventsrc"
 	"github.com/0m3kk/eventus/infra/postgres"
-	"github.com/0m3kk/eventus/sample/app"
 	"github.com/0m3kk/eventus/testutil"
 )
 
 type HandlerIntegrationSuite struct {
 	testutil.DBIntegrationSuite
 	idempotencyStore *postgres.IdempotencyStore
-	productViewRepo  *app.ProductViewRepository
+	versionedRepo    *testutil.VersionedRepository
 	db               *postgres.DB
 }
 
@@ -30,7 +30,11 @@ func TestHandlerIntegrationSuite(t *testing.T) {
 func (s *HandlerIntegrationSuite) SetupTest() {
 	s.db = &postgres.DB{Pool: s.Pool}
 	s.idempotencyStore = postgres.NewIdempotencyStore(s.db)
-	s.productViewRepo = app.NewProductViewRepository(s.Pool)
+	s.versionedRepo = testutil.NewVersionedRepository(s.Pool)
+	err := s.versionedRepo.CreateTable()
+	if err != nil {
+		log.Panic(err)
+	}
 	s.TruncateTables("processed_events")
 }
 
@@ -48,7 +52,7 @@ func (s *HandlerIntegrationSuite) TestProjection_HappyPath() {
 		return nil
 	}
 
-	projection := cqrs.NewProjection(subscriberID, s.idempotencyStore, s.productViewRepo, s.db, mockHandler)
+	projection := cqrs.NewProjection(subscriberID, s.idempotencyStore, s.versionedRepo, s.db, mockHandler)
 	testEvent := eventsrc.OutboxEvent{EventID: eventID, AggregateID: aggregateID, Version: 1}
 
 	// WHEN
@@ -76,7 +80,7 @@ func (s *HandlerIntegrationSuite) TestProjection_SkipsDuplicateEvent() {
 		return nil
 	}
 
-	projection := cqrs.NewProjection(subscriberID, s.idempotencyStore, s.productViewRepo, s.db, mockHandler)
+	projection := cqrs.NewProjection(subscriberID, s.idempotencyStore, s.versionedRepo, s.db, mockHandler)
 	testEvent := eventsrc.OutboxEvent{EventID: uuid.New(), AggregateID: aggregateID, Version: 1}
 
 	// Process it the first time
@@ -111,7 +115,7 @@ func (s *HandlerIntegrationSuite) TestProjection_RollsBackOnHandlerFailure() {
 	projection := cqrs.NewProjection(
 		subscriberID,
 		s.idempotencyStore,
-		s.productViewRepo,
+		s.versionedRepo,
 		s.db,
 		failingHandler,
 		cqrs.WithMaxElapsedTime(5*time.Second),
@@ -149,7 +153,7 @@ func (s *HandlerIntegrationSuite) TestProjection_RetriesOnTransientFailure() {
 	projection := cqrs.NewProjection(
 		subscriberID,
 		s.idempotencyStore,
-		s.productViewRepo,
+		s.versionedRepo,
 		s.db,
 		transientlyFailingHandler,
 		cqrs.WithMaxElapsedTime(2*time.Second),
@@ -191,7 +195,7 @@ func (s *HandlerIntegrationSuite) TestProjection_RejectsOutOfOrderEvent() {
 	projection := cqrs.NewProjection(
 		subscriberID,
 		s.idempotencyStore,
-		s.productViewRepo,
+		s.versionedRepo,
 		s.db,
 		mockHandler,
 	)
@@ -213,7 +217,7 @@ func (s *HandlerIntegrationSuite) TestProjection_RejectsOutOfOrderEvent() {
 	s.False(isProcessed, "Out-of-order event should not be marked as processed")
 
 	// 4. The view model version should remain unchanged (at 0).
-	currentVersion, dbErr := s.productViewRepo.GetVersion(ctx, aggregateID)
+	currentVersion, dbErr := s.versionedRepo.GetVersion(ctx, aggregateID)
 	s.NoError(dbErr)
 	s.Equal(0, currentVersion, "View model version should not have changed")
 }
