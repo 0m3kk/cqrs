@@ -225,6 +225,7 @@ The **View Repository** provides methods to interact with read models.
   * Define the view model struct in the `query/view` package.
   * The repository in `query/repository` should provide data access methods like `Save`, `Update`, `GetByID`, and `Delete`.
   * It should also provide a `List` method that can be extended to support advanced querying.
+  * It must include `GetVersion(ctx context.Context, aggregateID uuid.UUID) (int, error)` function.
 
 #### Sample Code Snippet:
 
@@ -247,6 +248,21 @@ package repository
 // ProductViewRepository provides access to the product_views table.
 type ProductViewRepository struct {
 	pool *pgxpool.Pool
+}
+
+// GetVersion retrieves the current version of the product view.
+// It satisfies the handler.VersionedStore interface.
+func (r *ProductViewRepository) GetVersion(ctx context.Context, aggregateID uuid.UUID) (int, error) {
+	var version int
+	query := `SELECT version FROM product_views WHERE id = $1`
+	err := r.pool.QueryRow(ctx, query, aggregateID).Scan(&version)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil // Return 0 if the view doesn't exist yet.
+		}
+		return 0, err
+	}
+	return version, nil
 }
 
 // Save inserts a new ProductView.
