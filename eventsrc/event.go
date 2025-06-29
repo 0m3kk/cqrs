@@ -2,6 +2,7 @@ package eventsrc
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -13,6 +14,7 @@ type Event interface {
 	AggregateType() AggregateType
 	EventType() string
 	Version() int
+	Timestamp() time.Time
 }
 
 // BaseEvent provides a common implementation for the Event interface.
@@ -22,12 +24,14 @@ type BaseEvent struct {
 	AggID   uuid.UUID     `json:"aggregate_id"`
 	AggType AggregateType `json:"aggregate_type"`
 	Ver     int           `json:"version"`
+	Ts      time.Time     `json:"ts"`
 }
 
 func (b BaseEvent) EventID() uuid.UUID           { return b.ID }
 func (b BaseEvent) AggregateID() uuid.UUID       { return b.AggID }
 func (b BaseEvent) AggregateType() AggregateType { return b.AggType }
 func (b BaseEvent) Version() int                 { return b.Ver }
+func (b BaseEvent) Timestamp() time.Time         { return b.Ts }
 
 // OutboxEvent represents the structure of an event stored in the outbox table.
 type OutboxEvent struct {
@@ -37,4 +41,5 @@ type OutboxEvent struct {
 	EventType     string
 	Payload       json.RawMessage
 	Version       int
+	Ts            time.Time
 }

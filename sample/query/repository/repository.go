@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/0m3kk/eventus/sample/domain/event"
 	"github.com/0m3kk/eventus/sample/query/view"
 )
 
@@ -40,7 +39,7 @@ func (r *ProductViewRepository) GetVersion(ctx context.Context, aggregateID uuid
 
 // SaveProductView saves or updates the product read model.
 // This would be called by the event handler's business logic.
-func (r *ProductViewRepository) SaveProductView(ctx context.Context, evt event.ProductCreated) error {
+func (r *ProductViewRepository) SaveProductView(ctx context.Context, view view.ProductView) error {
 	tx, ok := ctx.Value(txKey{}).(pgx.Tx)
 	if !ok {
 		return fmt.Errorf("SaveProductView must be called within a transaction")
@@ -55,7 +54,7 @@ func (r *ProductViewRepository) SaveProductView(ctx context.Context, evt event.P
             version = EXCLUDED.version,
             updated_at = EXCLUDED.updated_at
     `
-	_, err := tx.Exec(ctx, query, evt.AggregateID(), evt.Name, evt.Price, evt.Version(), time.Now())
+	_, err := tx.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to save product view: %w", err)
 	}
@@ -69,7 +68,7 @@ func (r *ProductViewRepository) GetProductViewByID(
 ) (*view.ProductView, error) {
 	var productView view.ProductView
 	query := `
-        SELECT id, name, price, version, updated_at
+        SELECT id, name, price, version, created_at, updated_at
         FROM product_views
         WHERE id = $1
     `
@@ -78,6 +77,7 @@ func (r *ProductViewRepository) GetProductViewByID(
 		&productView.Name,
 		&productView.Price,
 		&productView.Version,
+		&productView.CreatedAt,
 		&productView.UpdatedAt,
 	)
 	if err != nil {

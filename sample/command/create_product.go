@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -13,6 +14,13 @@ import (
 	"github.com/0m3kk/eventus/sample/domain/event"
 	"github.com/0m3kk/eventus/sample/domain/repository"
 )
+
+// CreateProductCommand is the command for creating a new product.
+type CreateProductCommand struct {
+	ID    uuid.UUID
+	Name  string
+	Price float64
+}
 
 // CreateProductHandler handles the CreateProductCommand.
 type CreateProductHandler struct {
@@ -43,6 +51,7 @@ func (h *CreateProductHandler) Handle(ctx context.Context, cmd CreateProductComm
 				ID:      uuid.New(),
 				AggID:   cmd.ID,
 				AggType: aggregate.ProductAggregateType,
+				Ts:      time.Now().UTC(),
 			},
 			Name:  cmd.Name,
 			Price: cmd.Price,

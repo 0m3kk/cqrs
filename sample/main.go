@@ -15,7 +15,6 @@ import (
 	"github.com/0m3kk/eventus/infra/postgres"
 	"github.com/0m3kk/eventus/outbox"
 	"github.com/0m3kk/eventus/sample/command"
-	"github.com/0m3kk/eventus/sample/domain/event"
 	domainRepository "github.com/0m3kk/eventus/sample/domain/repository"
 	"github.com/0m3kk/eventus/sample/query/projection"
 	"github.com/0m3kk/eventus/sample/query/query"
@@ -67,7 +66,6 @@ func main() {
 	productRepo := domainRepository.NewProductRepository(eventStore)
 	idempotencyStore := postgres.NewIdempotencyStore(db)
 	productViewRepo := viewRepository.NewProductViewRepository(db.Pool)
-	event.RegisterAllEvents()
 
 	// Framework Components
 	// Start multiple relay workers for concurrency

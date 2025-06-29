@@ -81,15 +81,24 @@ func (s *Store) Load(
 func (s *Store) saveEventsInTx(ctx context.Context, tx pgx.Tx, events []eventsrc.Event) error {
 	b := &pgx.Batch{}
 	stmt := `
-        INSERT INTO event_store (event_id, aggregate_id, aggregate_type, event_type, payload, version)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO event_store (event_id, aggregate_id, aggregate_type, event_type, payload, version, ts)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
     `
 	for _, evt := range events {
 		payload, err := json.Marshal(evt)
 		if err != nil {
 			return fmt.Errorf("failed to marshal event payload: %w", err)
 		}
-		b.Queue(stmt, evt.EventID(), evt.AggregateID(), evt.AggregateType(), evt.EventType(), payload, evt.Version())
+		b.Queue(
+			stmt,
+			evt.EventID(),
+			evt.AggregateID(),
+			evt.AggregateType(),
+			evt.EventType(),
+			payload,
+			evt.Version(),
+			evt.Timestamp(),
+		)
 	}
 
 	br := tx.SendBatch(ctx, b)

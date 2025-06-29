@@ -61,10 +61,10 @@ func (s *OutboxStore) ProcessOutboxBatch(
 // fetchAndLockUnpublishedInTx is an internal helper that performs the SELECT ... FOR UPDATE.
 func fetchAndLockUnpublishedInTx(ctx context.Context, tx pgx.Tx, batchSize int) ([]eventsrc.OutboxEvent, error) {
 	query := `
-        SELECT event_id, aggregate_id, aggregate_type, event_type, payload, version
+        SELECT event_id, aggregate_id, aggregate_type, event_type, payload, version, ts
         FROM outbox
         WHERE published = FALSE
-        ORDER BY created_at
+        ORDER BY ts
         LIMIT $1
         FOR UPDATE SKIP LOCKED
     `
@@ -110,15 +110,24 @@ func (s *OutboxStore) SaveEvents(ctx context.Context, events []eventsrc.Event) e
 
 	b := &pgx.Batch{}
 	stmt := `
-        INSERT INTO outbox (event_id, aggregate_id, aggregate_type, event_type, payload, version)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO outbox (event_id, aggregate_id, aggregate_type, event_type, payload, version, ts)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
     `
 	for _, evt := range events {
 		payload, err := json.Marshal(evt)
 		if err != nil {
 			return fmt.Errorf("failed to marshal event payload for event %s: %w", evt.EventID(), err)
 		}
-		b.Queue(stmt, evt.EventID(), evt.AggregateID(), evt.AggregateType(), evt.EventType(), payload, evt.Version())
+		b.Queue(
+			stmt,
+			evt.EventID(),
+			evt.AggregateID(),
+			evt.AggregateType(),
+			evt.EventType(),
+			payload,
+			evt.Version(),
+			evt.Timestamp(),
+		)
 	}
 
 	br := tx.SendBatch(ctx, b)

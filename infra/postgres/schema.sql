@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS event_store (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     version INT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Enforce ordering and optimistic concurrency control
     CONSTRAINT uq_aggregate_version UNIQUE (aggregate_id, version)
 );
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
     aggregate_type VARCHAR(255) NOT NULL,
     aggregate_version INT NOT NULL,
     payload JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Only one snapshot per aggregate version
     CONSTRAINT uq_snapshot_aggregate_version UNIQUE (aggregate_id, aggregate_version)
 );
@@ -42,12 +42,12 @@ CREATE TABLE IF NOT EXISTS outbox (
     event_type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,
     version INT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     published BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Index for the relay to efficiently find unpublished events.
-CREATE INDEX IF NOT EXISTS idx_outbox_unpublished ON outbox (created_at) WHERE published = FALSE;
+CREATE INDEX IF NOT EXISTS idx_outbox_unpublished ON outbox (ts) WHERE published = FALSE;
 
 -- The processed_events table ensures that subscribers process each
 -- event exactly once, making consumers idempotent.
