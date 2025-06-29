@@ -14,21 +14,20 @@ var (
 )
 
 // RegisterEvent associates an event type name with a factory function.
-// It should be called during application initialization (e.g., in an init() function).
+// The factory function is responsible for creating a new, empty instance of a specific event.
 // This function will panic if an event type is registered more than once.
-func RegisterEvent[T Event](event T) {
+func RegisterEvent(eventType string, factory EventFactory) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if _, ok := eventRegistry[event.EventType()]; ok {
-		panic(fmt.Sprintf("event type '%s' is already registered", event.AggregateType()))
+	if _, ok := eventRegistry[eventType]; ok {
+		panic(fmt.Sprintf("event type '%s' is already registered", eventType))
 	}
-	eventRegistry[event.EventType()] = func() Event {
-		return *new(T)
-	}
+
+	eventRegistry[eventType] = factory
 }
 
-// CreateEvent instantiates an event given its type name.
+// CreateEvent instantiates an event given its type name by calling its registered factory.
 // It returns an error if the event type has not been registered.
 func CreateEvent(eventType string) (Event, error) {
 	mu.RLock()
@@ -39,5 +38,6 @@ func CreateEvent(eventType string) (Event, error) {
 		return nil, fmt.Errorf("event type '%s' is not registered", eventType)
 	}
 
+	// Call the factory to get a new instance (e.g., &ProductCreated{})
 	return factory(), nil
 }

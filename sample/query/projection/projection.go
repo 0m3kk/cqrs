@@ -26,6 +26,8 @@ func (p *ProductProjectionHandler) Handle(ctx context.Context, evt eventsrc.Outb
 	switch evt.EventType {
 	case event.ProductCreatedEventType:
 		return p.handleProductCreated(ctx, evt)
+	case event.ProductUpdatedEventType:
+		return p.handleProductUpdated(ctx, evt)
 	}
 	return nil
 }
@@ -52,6 +54,30 @@ func (p *ProductProjectionHandler) handleProductCreated(ctx context.Context, evt
 		Version:   evt.Version,
 	}); err != nil {
 		slog.ErrorContext(ctx, "save product view failed", "error", err)
+	}
+	return nil
+}
+
+func (p *ProductProjectionHandler) handleProductUpdated(ctx context.Context, evt eventsrc.OutboxEvent) error {
+	var productUpdatedEvt event.ProductUpdated
+	if err := json.Unmarshal(evt.Payload, &productUpdatedEvt); err != nil {
+		return fmt.Errorf("failed to unmarshal ProductUpdated event: %w", err)
+	}
+
+	slog.InfoContext(ctx, "Projecting ProductView",
+		"productID", productUpdatedEvt.AggregateID(),
+		"name", productUpdatedEvt.Name,
+		"price", productUpdatedEvt.Price)
+
+	// The actual business logic is to save the view.
+	if err := p.repo.UpdateProductView(ctx, view.ProductView{
+		ID:        productUpdatedEvt.AggID,
+		Name:      productUpdatedEvt.Name,
+		Price:     productUpdatedEvt.Price,
+		UpdatedAt: evt.Ts,
+		Version:   evt.Version,
+	}); err != nil {
+		slog.ErrorContext(ctx, "update product view failed", "error", err)
 	}
 	return nil
 }

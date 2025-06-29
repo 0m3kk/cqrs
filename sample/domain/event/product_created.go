@@ -14,5 +14,7 @@ type ProductCreated struct {
 func (e ProductCreated) EventType() string { return ProductCreatedEventType }
 
 func init() {
-	eventsrc.RegisterEvent(&ProductCreated{})
+	eventsrc.RegisterEvent(ProductCreatedEventType, func() eventsrc.Event {
+		return &ProductCreated{}
+	})
 }

@@ -46,7 +46,7 @@ func (h *CreateProductHandler) Handle(ctx context.Context, cmd CreateProductComm
 
 		// 2. Apply a change to the aggregate. This creates a `ProductCreated` event
 		// and adds it to the aggregate's list of uncommitted events.
-		if err := p.TrackChange(txCtx, event.ProductCreated{
+		if err := p.TrackChange(txCtx, &event.ProductCreated{
 			BaseEvent: eventsrc.BaseEvent{
 				ID:      uuid.New(),
 				AggID:   cmd.ID,

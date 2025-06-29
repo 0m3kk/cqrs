@@ -55,6 +55,22 @@ func (r *ProductViewRepository) SaveProductView(ctx context.Context, view view.P
 	return nil
 }
 
+func (r *ProductViewRepository) UpdateProductView(ctx context.Context, view view.ProductView) error {
+	query := `
+		UPDATE product_views SET
+			name = $2,
+			price = $3,
+			version = $4,
+			updated_at = $5
+		WHERE id = $1
+	`
+	_, err := r.pool.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, view.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to update product view: %w", err)
+	}
+	return nil
+}
+
 // GetProductViewByID retrieves the product view by its ID.
 func (r *ProductViewRepository) GetProductViewByID(
 	ctx context.Context,

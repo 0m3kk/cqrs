@@ -104,6 +104,7 @@ func main() {
 
 	// Command Side
 	createProductHandler := command.NewCreateProductHandler(productRepo, db)
+	updateProductHandler := command.NewUpdateProductHandler(productRepo, db)
 
 	// Query Side
 	getProductByIDHandler := query.NewGetProductByIDHandler(*productViewRepo)
@@ -151,6 +152,39 @@ func main() {
 		// 2. QUERY: Query the read model to get the product view.
 		slog.Info("--> 2. Simulating GetProductByIDQuery...", "productID", productID)
 		productView, err := getProductByIDHandler.Query(context.Background(), query.GetProductByID{ID: productID})
+		if err != nil {
+			slog.Error("Failed to handle GetProductByIDQuery", "error", err)
+			return
+		}
+
+		slog.Info(
+			"<-- Query handled successfully. Product Details:",
+			"name",
+			productView.Name,
+			"price",
+			productView.Price,
+		)
+
+		// 3. COMMAND: Send a command to update the product.
+		slog.Info("--> 3. Simulating UpdateProductCommand...", "productID", productID)
+		updateCmd := command.UpdateProduct{
+			ID:    productID,
+			Name:  "CQRS-Powered Widget (Updated)",
+			Price: 200.01,
+		}
+		if err := updateProductHandler.Handle(context.Background(), updateCmd); err != nil {
+			slog.Error("Failed to handle UpdateProductCommand", "error", err)
+			return
+		}
+
+		// Give the system a moment to process the event through the outbox and projection.
+		// This simulates the eventual consistency of the read model.
+		slog.Info("... Waiting 5 seconds for eventual consistency ...")
+		time.Sleep(5 * time.Second)
+
+		// 4. QUERY: Query the read model to get the product view.
+		slog.Info("--> 4. Simulating GetProductByIDQuery...", "productID", productID)
+		productView, err = getProductByIDHandler.Query(context.Background(), query.GetProductByID{ID: productID})
 		if err != nil {
 			slog.Error("Failed to handle GetProductByIDQuery", "error", err)
 			return

@@ -160,9 +160,10 @@ type ProductCreated struct {
 
 func (e ProductCreated) EventType() string { return ProductCreatedEventType }
 
-// In main.go or an init() function:
 func init() {
-    eventsrc.RegisterEvent(&event.ProductCreated{})
+	eventsrc.RegisterEvent(ProductCreatedEventType, func() eventsrc.Event {
+		return &ProductCreated{}
+	})
 }
 ```
 
