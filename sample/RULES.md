@@ -43,7 +43,7 @@ The **Aggregate** validates state and applies events by routing them to specific
 // In domain/aggregate/product_aggregate.go
 package aggregate
 
-// ... (imports and constants)
+import "github.com/0m3kk/eventus/eventsrc"
 
 type ProductAggregate struct {
 	*eventsrc.AggregateRoot
@@ -96,7 +96,14 @@ A **Command** is a request to change state, handled by creating and tracking an 
 // In command/create_product_handler.go
 package command
 
-// ... (imports)
+import (
+	"context"
+
+	"github.com/google/uuid"
+
+	"github.com/0m3kk/eventus/cqrs"
+	"github.com/0m3kk/eventus/eventsrc"
+)
 
 type CreateProductHandler struct {
 	repo       *repository.ProductRepository
@@ -141,6 +148,8 @@ An **Event** is a record of something that happened.
 // In domain/event/product_created.go
 package event
 
+import "github.com/0m3kk/eventus/eventsrc"
+
 const ProductCreatedEventType = "ProductCreated"
 
 type ProductCreated struct {
@@ -173,7 +182,9 @@ A **Projection** builds a fast read model by listening for events and dispatchin
 // In query/projection/product_projection.go
 package projection
 
-// ... (imports)
+import (
+	"github.com/0m3kk/eventus/eventsrc"
+)
 
 type ProductProjectionHandler struct {
 	repo *repository.ProductViewRepository // The generic view repository
