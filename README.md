@@ -1,5 +1,3 @@
-Of course\! Here is a revised and more beautifully formatted `README.md` that combines the information from the root and sample application's `README.md` files, with added emojis for a more engaging look.
-
 # **🚀 Eventus: A Go Framework for CQRS & Event Sourcing**
 
 A lightweight yet robust Go framework for building event-driven, scalable, and resilient services using **Command Query Responsibility Segregation (CQRS)** and **Event Sourcing**. It comes with built-in support for common patterns required in distributed systems, such as the Transactional Outbox, Idempotent Consumers, and Snapshotting.

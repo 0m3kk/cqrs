@@ -43,11 +43,15 @@ func (p *ProductProjectionHandler) handleProductCreated(ctx context.Context, evt
 		"price", productCreatedEvt.Price)
 
 	// The actual business logic is to save the view.
-	return p.repo.SaveProductView(ctx, view.ProductView{
+	if err := p.repo.SaveProductView(ctx, view.ProductView{
 		ID:        productCreatedEvt.AggID,
 		Name:      productCreatedEvt.Name,
 		Price:     productCreatedEvt.Price,
+		CreatedAt: evt.Ts,
 		UpdatedAt: evt.Ts,
 		Version:   evt.Version,
-	})
+	}); err != nil {
+		slog.ErrorContext(ctx, "save product view failed", "error", err)
+	}
+	return nil
 }

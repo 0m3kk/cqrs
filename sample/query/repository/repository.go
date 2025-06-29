@@ -39,21 +39,16 @@ func (r *ProductViewRepository) GetVersion(ctx context.Context, aggregateID uuid
 // SaveProductView saves or updates the product read model.
 // This would be called by the event handler's business logic.
 func (r *ProductViewRepository) SaveProductView(ctx context.Context, view view.ProductView) error {
-	tx, ok := ctx.Value(txKey{}).(pgx.Tx)
-	if !ok {
-		return fmt.Errorf("SaveProductView must be called within a transaction")
-	}
-
 	query := `
         INSERT INTO product_views (id, name, price, version, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             price = EXCLUDED.price,
             version = EXCLUDED.version,
             updated_at = EXCLUDED.updated_at
     `
-	_, err := tx.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, view.CreatedAt, view.UpdatedAt)
+	_, err := r.pool.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, view.CreatedAt, view.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to save product view: %w", err)
 	}
