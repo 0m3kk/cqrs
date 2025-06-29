@@ -40,9 +40,8 @@ func NewNATSBroker(url string) (*NATSBroker, error) {
 	return &NATSBroker{conn: nc, js: js}, nil
 }
 
-// Publish sends an event to a NATS topic.
-func (b *NATSBroker) Publish(ctx context.Context, topic string, evt eventsrc.OutboxEvent) error {
-	// Ensure the stream exists for the topic
+// ensureTopicExist ensure the stream exists for the topic
+func (b *NATSBroker) ensureTopicExist(ctx context.Context, topic string) error {
 	streamName := topic
 	_, err := b.js.StreamInfo(streamName)
 	if err != nil {
@@ -58,6 +57,14 @@ func (b *NATSBroker) Publish(ctx context.Context, topic string, evt eventsrc.Out
 		} else {
 			return fmt.Errorf("failed to get stream info for %s: %w", streamName, err)
 		}
+	}
+	return nil
+}
+
+// Publish sends an event to a NATS topic.
+func (b *NATSBroker) Publish(ctx context.Context, topic string, evt eventsrc.OutboxEvent) error {
+	if err := b.ensureTopicExist(ctx, topic); err != nil {
+		return fmt.Errorf("failed to ensure the topic exists when publishing. %w", err)
 	}
 
 	data, err := json.Marshal(evt)
@@ -84,6 +91,10 @@ func (b *NATSBroker) Subscribe(
 	topic, subscriberID string,
 	handler func(context.Context, eventsrc.OutboxEvent) error,
 ) error {
+	if err := b.ensureTopicExist(ctx, topic); err != nil {
+		return fmt.Errorf("failed to ensure the topic exists when subscribing. %w", err)
+	}
+
 	streamName := topic
 	consumerName := fmt.Sprintf("%s-%s", topic, subscriberID)
 
@@ -95,18 +106,7 @@ func (b *NATSBroker) Subscribe(
 		nats.PullMaxWaiting(128),
 	)
 	if err != nil {
-		if err == nats.ErrNoMatchingStream {
-			slog.InfoContext(ctx, "Stream not found, creating it", "stream", streamName)
-			_, err = b.js.AddStream(&nats.StreamConfig{
-				Name:     streamName,
-				Subjects: []string{fmt.Sprintf("%s.*", streamName)},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create stream %s: %w", streamName, err)
-			}
-		} else {
-			return fmt.Errorf("failed to create pull subscription: %w", err)
-		}
+		return fmt.Errorf("failed to create pull subscription: %w", err)
 	}
 
 	go func() {

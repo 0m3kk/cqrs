@@ -237,6 +237,7 @@ type ProductView struct {
 	Name      string    `json:"name"`
 	Price     float64   `json:"price"`
 	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
@@ -250,23 +251,23 @@ type ProductViewRepository struct {
 
 // Save inserts a new ProductView.
 func (r *ProductViewRepository) Save(ctx context.Context, view view.ProductView) error {
-	query := "INSERT INTO product_views (id, name, price, version, updated_at) VALUES ($1, $2, $3, $4, $5)"
-	_, err := r.pool.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, time.Now())
+	query := "INSERT INTO product_views (id, name, price, version, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)"
+	_, err := r.pool.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, view.CreatedAt, view.UpdatedAt)
 	return err
 }
 
 // Update modifies an existing ProductView.
 func (r *ProductViewRepository) Update(ctx context.Context, view view.ProductView) error {
 	query := "UPDATE product_views SET name = $2, price = $3, version = $4, updated_at = $5 WHERE id = $1"
-	_, err := r.pool.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, time.Now())
+	_, err := r.pool.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, view.UpdatedAt)
 	return err
 }
 
 // GetByID retrieves a single ProductView by its ID.
 func (r *ProductViewRepository) GetByID(ctx context.Context, id uuid.UUID) (*view.ProductView, error) {
 	var view view.ProductView
-	query := "SELECT id, name, price, version, updated_at FROM product_views WHERE id = $1"
-	err := r.pool.QueryRow(ctx, query, id).Scan(&view.ID, &view.Name, &view.Price, &view.Version, &view.UpdatedAt)
+	query := "SELECT id, name, price, version, created_at, updated_at FROM product_views WHERE id = $1"
+	err := r.pool.QueryRow(ctx, query, id).Scan(&view.ID, &view.Name, &view.Price, &view.Version, &view.CreatedAt, &view.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

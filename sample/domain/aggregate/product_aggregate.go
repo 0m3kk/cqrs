@@ -72,7 +72,7 @@ func (p *ProductAggregate) Validate() error {
 func (p *ProductAggregate) Apply(ctx context.Context, evt eventsrc.Event) error {
 	var err error
 	switch e := evt.(type) {
-	case *event.ProductCreated:
+	case event.ProductCreated:
 		err = p.onProductCreated(e)
 	default:
 		err = fmt.Errorf("unknown event type: %s", reflect.TypeOf(evt))
@@ -84,7 +84,7 @@ func (p *ProductAggregate) Apply(ctx context.Context, evt eventsrc.Event) error 
 	return nil
 }
 
-func (p *ProductAggregate) onProductCreated(evt *event.ProductCreated) error {
+func (p *ProductAggregate) onProductCreated(evt event.ProductCreated) error {
 	p.SetID(evt.AggregateID())
 	p.Product.Name = evt.Name
 	p.Product.Price = evt.Price

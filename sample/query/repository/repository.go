@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -46,7 +45,7 @@ func (r *ProductViewRepository) SaveProductView(ctx context.Context, view view.P
 	}
 
 	query := `
-        INSERT INTO product_views (id, name, price, version, updated_at)
+        INSERT INTO product_views (id, name, price, version, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
@@ -54,7 +53,7 @@ func (r *ProductViewRepository) SaveProductView(ctx context.Context, view view.P
             version = EXCLUDED.version,
             updated_at = EXCLUDED.updated_at
     `
-	_, err := tx.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, time.Now())
+	_, err := tx.Exec(ctx, query, view.ID, view.Name, view.Price, view.Version, view.CreatedAt, view.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to save product view: %w", err)
 	}
