@@ -51,6 +51,7 @@ func (h *CreateProductHandler) Handle(ctx context.Context, cmd CreateProductComm
 				ID:      uuid.New(),
 				AggID:   cmd.ID,
 				AggType: aggregate.ProductAggregateType,
+				Ver:     p.Version() + 1,
 				Ts:      time.Now().UTC(),
 			},
 			Name:  cmd.Name,

@@ -2,14 +2,17 @@ package query
 
 import (
 	"context"
-	"errors"
 	"fmt"
+
+	"github.com/google/uuid"
 
 	"github.com/0m3kk/eventus/sample/query/repository"
 	"github.com/0m3kk/eventus/sample/query/view"
 )
 
-var ErrorProductNotFound = errors.New("product not found")
+type GetProductByID struct {
+	ID uuid.UUID `json:"id"`
+}
 
 // GetProductByIDHandler is a handler for retrieving a product view by its ID.
 type GetProductByIDHandler struct {

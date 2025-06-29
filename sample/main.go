@@ -21,6 +21,26 @@ import (
 	viewRepository "github.com/0m3kk/eventus/sample/query/repository"
 )
 
+// ProductViewSchema defines the SQL statement for creating the product_views table.
+const ProductViewSchema = `
+CREATE TABLE IF NOT EXISTS product_views (
+    id UUID PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    price INT NOT NULL,
+    version INT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);`
+
+// createProductViewTable ensures the product_views table exists in the database.
+func createProductViewTable(db *postgres.DB) error {
+	_, err := db.Pool.Exec(context.Background(), ProductViewSchema)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	// Setup structured logging
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -51,6 +71,11 @@ func main() {
 	}
 	defer db.Close()
 	slog.Info("Database connection established")
+
+	if err = createProductViewTable(db); err != nil {
+		slog.Error("Failed to create product views", "error", err)
+		os.Exit(1)
+	}
 
 	broker, err := nats.NewNATSBroker(natsURL)
 	if err != nil {
